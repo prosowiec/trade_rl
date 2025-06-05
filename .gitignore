@@ -1,0 +1,6 @@
+test/*
+LSTM/*
+logs/*
+models/*
+data/*
+.env
