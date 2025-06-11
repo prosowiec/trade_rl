@@ -30,7 +30,7 @@ EPISODES = 1000
 
 # Exploration settings
 epsilon = 1  # not a constant, going to be decayed
-EPSILON_DECAY = 0.99975
+EPSILON_DECAY = 0.9575
 MIN_EPSILON = 0.001
 
 #  Stats settings
@@ -77,7 +77,7 @@ class DQNAgent:
     def update_replay_memory(self, transition):
         self.replay_memory.append(transition)
 
-    def train(self, terminal_state, step, min_val, max_val):
+    def train(self, terminal_state, step):
         if len(self.replay_memory) < MIN_REPLAY_MEMORY_SIZE:
             return
 
@@ -189,3 +189,50 @@ def load_dqn_agent(agent, filename="dqn_model.pth"):
     agent.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     print(f"Model załadowany z {filename}")
 
+def train_parallel_episode(agent, envs, episode, epsilon, NUM_ENVS = 4):
+    states, _ = envs.reset()
+    episode_rewards = [0.0 for _ in range(NUM_ENVS)]
+    dones = [False for _ in range(NUM_ENVS)]
+    step = 1
+
+    while not all(dones):
+        actions = []
+        for i in range(NUM_ENVS):
+            if np.random.random() > epsilon:
+                actions.append(np.argmax(agent.get_qs(states[i])))
+            else:
+                actions.append(np.random.randint(0, envs.single_action_space.n))
+        
+        next_states, rewards, terminated, truncated, infos = envs.step(actions)
+
+        for i in range(NUM_ENVS):
+            done = terminated[i] or truncated[i]
+            agent.update_replay_memory((states[i], actions[i], rewards[i], next_states[i], done))
+            episode_rewards[i] += rewards[i]
+            if not dones[i]:
+                dones[i] = done
+
+        agent.train(any(dones), step)
+        states = next_states
+        step += 1
+
+    avg_reward = sum(episode_rewards) / NUM_ENVS
+    ep_rewards.append(avg_reward)
+
+    if SHOW_PREVIEW and not episode % AGGREGATE_STATS_EVERY:
+        print(f"Episode: {episode} Avg Reward: {avg_reward:.2f} Epsilon: {epsilon:.3f}")
+
+    if epsilon > MIN_EPSILON:
+        epsilon *= EPSILON_DECAY
+        epsilon = max(MIN_EPSILON, epsilon)
+
+    return avg_reward
+
+def train_dqn_agent_parallel(agent, envs):
+    global epsilon
+    EPISODES = 400
+
+    for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
+        train_parallel_episode(agent, envs, episode, epsilon)
+
+    save_dqn_agent(agent, "trained_agent_parallel.pth")

@@ -1,6 +1,7 @@
 import pandas as pd
 import threading
 import time
+import random
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
@@ -49,13 +50,13 @@ class IBapi(EWrapper, EClient):
                 keepUpToDate=False,  
                 chartOptions=[]
             )
-            time.sleep(3)  # Mały odstęp, by uniknąć rate limit
+            time.sleep(5)  # Mały odstęp, by uniknąć rate limit
     
     
 
 def retrive_market_data(tickers= ["AAPL", "MSFT", "TSLA"], duration = "3 M", time_interval = "30 mins"):
     app = IBapi()
-    app.connect("127.0.0.1", 7497, clientId=1)
+    app.connect("127.0.0.1", 7497, clientId=random.randint(1, 9999))
 
     # Wątek obsługujący API
     api_thread = threading.Thread(target=app.run, daemon=True)

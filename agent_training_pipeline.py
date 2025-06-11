@@ -90,13 +90,13 @@ def train_agent(ticker= "AAPL"):
     
     rl_train = data["rl_train"]
     env = TimeSeriesEnvFuturePredict(data=rl_train['Close'].values, lstm=LSTM_model,lstm_data=rl_train.values,device=device,
-                                 train_std = data["CLOSE_INDEX"],train_mean= data["CLOSE_INDEX"], window_size=48, future_size=OUT_STEPS)
+                                 train_std = data["dataset_mean"][data["CLOSE_INDEX"]],train_mean= data["dataset_std"][data["CLOSE_INDEX"]], window_size=48, future_size=OUT_STEPS)
     
 
     agent = DQNAgent(observation_space=env.observation_space.shape[0], action_space=env.action_space.n)
     
     epsilon = 0.95
-    EPISODES = 400
+    EPISODES = 200
     logging.info(f"Starting training for {EPISODES} episodes with initial epsilon {epsilon}.")
     for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
         train_episode(agent,env, episode, epsilon)
