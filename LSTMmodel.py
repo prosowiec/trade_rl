@@ -29,7 +29,7 @@ class MAPELoss(nn.Module):
 		return torch.mean(torch.abs((target - pred) / (target + self.epsilon))) * 100
 
 
-def train_model(model, train_loader, criterion, optimizer, num_epochs=2000,device = "cuda",show_loss_every = 100):
+def train_model(model, train_loader, criterion, optimizer, num_epochs=2000, device = "cuda",show_loss_every = 100):
     criterion = criterion
     history = []
     for epoch in range(num_epochs):

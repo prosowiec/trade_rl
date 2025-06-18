@@ -16,22 +16,20 @@ from PIL import Image
 import cv2
 
 
-DISCOUNT = 0.99
-REPLAY_MEMORY_SIZE = 1000  # How many last steps to keep for model training
-MIN_REPLAY_MEMORY_SIZE = 200  # Minimum number of steps in a memory to start training
-MINIBATCH_SIZE = 128  # How many steps (samples) to use for training
-UPDATE_TARGET_EVERY = 10  # Terminal states (end of episodes)
-MODEL_NAME = 'window48_profit'
-MIN_REWARD = -200  # For model save
-MEMORY_FRACTION = 0.20
+# DISCOUNT = 0.99
+# REPLAY_MEMORY_SIZE = 1000  # How many last steps to keep for model training
+# MIN_REPLAY_MEMORY_SIZE = 200  # Minimum number of steps in a memory to start training
+# MINIBATCH_SIZE = 128  # How many steps (samples) to use for training
+# UPDATE_TARGET_EVERY = 10  # Terminal states (end of episodes)
+# MODEL_NAME = 'window48_profit'
+# MIN_REWARD = -200  # For model save
+# #MEMORY_FRACTION = 0.20
 
-# Environment settings
-EPISODES = 1000
 
-# Exploration settings
-epsilon = 1  # not a constant, going to be decayed
-EPSILON_DECAY = 0.9575
-MIN_EPSILON = 0.001
+# # Exploration settings
+# epsilon = 1  # not a constant, going to be decayed
+# EPSILON_DECAY = 0.9575
+# MIN_EPSILON = 0.001
 
 #  Stats settings
 AGGREGATE_STATS_EVERY = 100  # episodes
@@ -60,7 +58,9 @@ class DQN(nn.Module):
         return self.output(x)
 
 class DQNAgent:
-    def __init__(self, observation_space,action_space):
+    def __init__(self, observation_space,action_space,DISCOUNT = 0.99,REPLAY_MEMORY_SIZE = 5000,MIN_REPLAY_MEMORY_SIZE = 500,
+                 MINIBATCH_SIZE = 128,EPSILON_DECAY = 0.99,MIN_EPSILON = 0.001,AGGREGATE_STATS_EVERY = 10, EPSILON = 1,
+                 UPDATE_TARGET_EVERY = 5):
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = DQN(observation_space, action_space).to(self.device)
@@ -74,14 +74,23 @@ class DQNAgent:
         self.replay_memory = deque(maxlen=REPLAY_MEMORY_SIZE)
         self.target_update_counter = 0
 
+        self.DISCOUNT = DISCOUNT
+        self.MIN_REPLAY_MEMORY_SIZE = MIN_REPLAY_MEMORY_SIZE
+        self.MINIBATCH_SIZE = MINIBATCH_SIZE
+        self.EPSILON_DECAY = EPSILON_DECAY
+        self.MIN_EPSILON = MIN_EPSILON
+        self.AGGREGATE_STATS_EVERY = AGGREGATE_STATS_EVERY
+        self.UPDATE_TARGET_EVERY = UPDATE_TARGET_EVERY
+        self.EPOSILON = EPSILON
+        
     def update_replay_memory(self, transition):
         self.replay_memory.append(transition)
 
-    def train(self, terminal_state, step):
-        if len(self.replay_memory) < MIN_REPLAY_MEMORY_SIZE:
+    def train(self, terminal_state):
+        if len(self.replay_memory) < self.MIN_REPLAY_MEMORY_SIZE:
             return
 
-        minibatch = random.sample(self.replay_memory, MINIBATCH_SIZE)
+        minibatch = random.sample(self.replay_memory, self.MINIBATCH_SIZE)
 
         # Rozpakowanie danych
         states, actions, rewards, next_states, dones = zip(*minibatch)
@@ -95,7 +104,7 @@ class DQNAgent:
         with torch.no_grad():
             target_qs = self.target_model(next_states_v)
             max_future_qs = torch.max(target_qs, dim=1)[0]
-            new_qs = rewards_v + (~dones_v * DISCOUNT * max_future_qs)
+            new_qs = rewards_v + (~dones_v * self.DISCOUNT * max_future_qs)
 
         current_qs = self.model(states_v)
         predicted_qs = current_qs.gather(1, actions_v.unsqueeze(1)).squeeze()
@@ -108,7 +117,7 @@ class DQNAgent:
         if terminal_state:
             self.target_update_counter += 1
 
-        if self.target_update_counter > UPDATE_TARGET_EVERY:
+        if self.target_update_counter > self.UPDATE_TARGET_EVERY:
             self.target_model.load_state_dict(self.model.state_dict())
             self.target_update_counter = 0
 
@@ -120,7 +129,7 @@ class DQNAgent:
         return qs.cpu().numpy()[0]
 
 
-def train_episode(agent,env, episode, epsilon):
+def train_episode(agent : DQNAgent,env, episode):
 
     episode_reward = 0
     step = 1
@@ -130,7 +139,7 @@ def train_episode(agent,env, episode, epsilon):
     done = False
     while not done:
 
-        if np.random.random() > epsilon:
+        if np.random.random() > agent.EPOSILON:
             action = np.argmax(agent.get_qs(current_state))
         else:
             # Get random action
@@ -144,21 +153,21 @@ def train_episode(agent,env, episode, epsilon):
 
         # Every step we update replay memory and train main network
         agent.update_replay_memory((current_state, action, reward, new_state, done))
-        agent.train(done, step, env.min_val, env.max_val)
+        agent.train(done)
 
         current_state = new_state
         step += 1
  
     # Append episode reward to a list and log stats (every given number of episodes)
     ep_rewards.append(episode_reward)
-    if SHOW_PREVIEW and not episode % AGGREGATE_STATS_EVERY:
-            print(f"Episode: {episode} Total Reward: {env.total_profit} Epsilon: {epsilon:.2f}")
+    if SHOW_PREVIEW and not episode % agent.AGGREGATE_STATS_EVERY:
+            print(f"Episode: {episode} Total Reward: {env.total_profit} Epsilon: {agent.EPOSILON:.2f}")
 
     
     # Decay epsilon
-    if epsilon > MIN_EPSILON:
-        epsilon *= EPSILON_DECAY
-        epsilon = max(MIN_EPSILON, epsilon)
+    if agent.EPOSILON > agent.MIN_EPSILON:
+        agent.EPOSILON *= agent.EPSILON_DECAY
+        agent.EPOSILON = max(agent.MIN_EPSILON, agent.EPOSILON)
 
     return episode_reward
 
@@ -189,16 +198,16 @@ def load_dqn_agent(agent, filename="dqn_model.pth"):
     agent.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     print(f"Model załadowany z {filename}")
 
-def train_parallel_episode(agent, envs, episode, epsilon, NUM_ENVS = 4):
+def train_parallel_episode(agent:DQNAgent, envs, episode, epsilon, NUM_ENVS = 4):
     states, _ = envs.reset()
     episode_rewards = [0.0 for _ in range(NUM_ENVS)]
     dones = [False for _ in range(NUM_ENVS)]
     step = 1
-
+    
     while not all(dones):
         actions = []
         for i in range(NUM_ENVS):
-            if np.random.random() > epsilon:
+            if np.random.random() > agent.EPOSILON:
                 actions.append(np.argmax(agent.get_qs(states[i])))
             else:
                 actions.append(np.random.randint(0, envs.single_action_space.n))
@@ -219,12 +228,12 @@ def train_parallel_episode(agent, envs, episode, epsilon, NUM_ENVS = 4):
     avg_reward = sum(episode_rewards) / NUM_ENVS
     ep_rewards.append(avg_reward)
 
-    if SHOW_PREVIEW and not episode % AGGREGATE_STATS_EVERY:
-        print(f"Episode: {episode} Avg Reward: {avg_reward:.2f} Epsilon: {epsilon:.3f}")
+    if SHOW_PREVIEW and not episode % agent.AGGREGATE_STATS_EVERY:
+        print(f"Episode: {episode} Avg Reward: {avg_reward:.2f} Epsilon: {agent.EPOSILON:.3f}")
 
-    if epsilon > MIN_EPSILON:
-        epsilon *= EPSILON_DECAY
-        epsilon = max(MIN_EPSILON, epsilon)
+    if agent.EPOSILON > agent.MIN_EPSILON:
+        agent.EPOSILON *= agent.EPSILON_DECAY
+        agent.EPOSILON = max(agent.MIN_EPSILON, agent.EPOSILON)
 
     return avg_reward
 
