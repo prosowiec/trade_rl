@@ -47,12 +47,11 @@ class TimeSeriesEnv(gym.Env):
         if action == 1:  # Buy
             self.inventory.append(price)
             self.states_buy.append(self.current_step)
-            # Brak nagrody za samo kupno
 
         elif action == 2 and len(self.inventory) > 0:  # Sell
             bought_price = self.inventory.pop(0)
             profit = price - bought_price
-            reward = profit #max(profit, 0)  # Możesz dać też samo `reward = profit` jeśli chcesz karać stratę
+            reward = profit #max(profit, 0)
             self.total_profit += profit
             #reward = self.total_profit
             self.states_sell.append(self.current_step)
