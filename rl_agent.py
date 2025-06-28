@@ -192,7 +192,7 @@ def train_dqn_agent(agent,env):
 
 
 def load_dqn_agent(agent, filename="dqn_model.pth"):
-    checkpoint = torch.load(filename, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    checkpoint = torch.load(filename, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"), weights_only=False)
     agent.model.load_state_dict(checkpoint['model_state_dict'])
     agent.target_model.load_state_dict(checkpoint['target_model_state_dict'])
     agent.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

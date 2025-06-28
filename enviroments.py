@@ -281,9 +281,9 @@ class TimeSeriesEnvFuturePredict_VEC(gym.Env):
 
         return self._get_observation(), reward, terminated, truncated, {}
 
-class TimeSeriesEnv_0_1(gym.Env):
+class TimeSeriesEnv_simple(gym.Env):
     def __init__(self, data, window_size=10):
-        super(TimeSeriesEnv_0_1, self).__init__()
+        super(TimeSeriesEnv_simple, self).__init__()
         self.data = data
         self.window_size = window_size
         self.current_step = window_size
@@ -297,6 +297,8 @@ class TimeSeriesEnv_0_1(gym.Env):
         self.total_profit = 0.0
         self.states_buy = []
         self.states_sell = []
+        self.action_reward = 0
+        #self.max_size = 10
         
         self.min_val = np.min(data)
         self.max_val = np.max(data)
@@ -311,10 +313,9 @@ class TimeSeriesEnv_0_1(gym.Env):
 
     def _get_observation(self):
         past = self.data[self.current_step - self.window_size:self.current_step]
-        #future = self.data[self.current_step:self.current_step + self.future_size]
-        #obs = np.concatenate([past, future])
 
-        # Normalizacja do zakresu [0, 1]
+        self.min_val = np.min(past)
+        self.max_val = np.max(past)
         return ((past - self.min_val) / (self.max_val - self.min_val + 1e-8)).astype(np.float32)
 
     def step(self, action):
@@ -325,17 +326,15 @@ class TimeSeriesEnv_0_1(gym.Env):
         if action == 1:  # Buy
             self.inventory.append(price)
             self.states_buy.append(self.current_step)
-            # Brak nagrody za samo kupno
 
         elif action == 2 and len(self.inventory) > 0:  # Sell
             bought_price = self.inventory.pop(0)
             profit = price - bought_price
-            reward = profit #max(profit, 0)  # Możesz dać też samo `reward = profit` jeśli chcesz karać stratę
+            reward = profit 
             self.total_profit += profit
             #reward = self.total_profit
             self.states_sell.append(self.current_step)
 
-        # Hold (0) nic nie robi
         self.current_step += 1
 
         if self.current_step >= len(self.data):
