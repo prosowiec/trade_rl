@@ -22,40 +22,59 @@ from eval_portfolio import evaluate_steps_portfolio, render_env
 from manager_env import PortfolioEnv
 import os
 
-os.environ['CUDA_LAUNCH_BLOCKING']="1"
-os.environ['TORCH_USE_CUDA_DSA'] = "1"
+# os.environ['CUDA_LAUNCH_BLOCKING']="1"
+# os.environ['TORCH_USE_CUDA_DSA'] = "1"
+
+# np.random.seed(2137)
+# torch.manual_seed(2137)  # dla CPU
+# torch.cuda.manual_seed(2137)  # dla GPU (jeśli używasz)
+# torch.cuda.manual_seed_all(2137)  # dla wszystkich GPU
+
+# Opcjonalnie: dla pełnej deterministyczności
 
 
 
 
+# class Actor(nn.Module):
+#     def __init__(self, state_dim, action_dim):
+#         super(Actor, self).__init__()
+#         self.net = nn.Sequential(
+#             nn.Linear(state_dim, 6), # Using the larger network from previous advice
+#             # nn.ReLU(),
+#             # nn.Linear(64, 32),
+#             nn.ReLU(),
+#             nn.Linear(6, action_dim),
+#             nn.Sigmoid()  # Zakres [-1, 1] dla każdej akcji
+#         )
 
-# class DQNPortfolio(nn.Module):
-#     def __init__(self, input_dim, output_dim):
-#         super(DQNPortfolio, self).__init__()
-#         self.out_steps = output_dim
-#         self.lstm = nn.LSTM(input_size=input_dim, hidden_size=8, batch_first=True)
-#         self.dropout = nn.Dropout(p=0.2)
-#         self.fc = nn.Linear(8, output_dim)
+#     def forward(self, state):
+#         return self.net(state)
 
-#     def forward(self, x):
-#         lstm_out, _ = self.lstm(x)  # x: [batch, seq_len, features]
-#         #last_hidden = lstm_out[:, -1, :]  # weź ostatni krok
-#         #x = self.dropout(last_hidden)
-#         x = self.fc(lstm_out)
-#         x = x.view(-1, self.out_steps, 1)
-#         x = torch.softmax(x, dim=1)  # alokacja portfela jako rozkład prawdopodobieństwa
-#         return x
+# class Critic(nn.Module):
+#     def __init__(self, state_dim, action_dim):
+#         super(Critic, self).__init__()
+#         self.net = nn.Sequential(
+#             nn.Linear(state_dim + action_dim, 6),
+#             # nn.ReLU(),
+#             # nn.Linear(64, 32),
+#             nn.ReLU(),
+#             nn.Linear(6, 1),
+#         )
 
+#     def forward(self, state, action):
+#         x = torch.cat([state, action], dim=1)
+#         return self.net(x)
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Actor, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_dim,4 ),
+            nn.Linear(state_dim, 48), # Using the larger network from previous advice
             nn.ReLU(),
-            # nn.Linear(48, 16),
-            # nn.ReLU(),
-            nn.Linear(4, action_dim),
-            nn.Sigmoid()  # Zakres [0, 1] dla każdej akcji
+            nn.Linear(48, 16),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(16, action_dim),
+            nn.Sigmoid()  # Zakres [-1, 1] dla każdej akcji
         )
 
     def forward(self, state):
@@ -65,11 +84,12 @@ class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_dim + action_dim, 4),
+            nn.Linear(state_dim + action_dim, 48),
             nn.ReLU(),
-            # nn.Linear(48, 16),
-            # nn.ReLU(),
-            nn.Linear(4, 1)
+            nn.Linear(48, 16),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(16, 1),
         )
 
     def forward(self, state, action):
@@ -77,8 +97,10 @@ class Critic(nn.Module):
         return self.net(x)
 
 
+
+
 class AgentPortfolio:
-    def __init__(self, input_dim=9, action_dim=1):
+    def __init__(self, input_dim=97, action_dim=1):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -89,7 +111,7 @@ class AgentPortfolio:
         self.target_actor.load_state_dict(self.actor.state_dict())
         self.target_critic.load_state_dict(self.critic.state_dict())
 
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-4)
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-3)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=1e-3)
 
         self.loss_fn = nn.MSELoss()
@@ -97,11 +119,11 @@ class AgentPortfolio:
         self.replay_memory = deque(maxlen=50000)
         self.MIN_REPLAY_MEMORY_SIZE = 500
         self.MINIBATCH_SIZE = 64
-        self.DISCOUNT = 0.99
-        self.TAU = 0.005  # do soft update
+        self.DISCOUNT = 0.999
+        self.TAU = 1e-3  # do soft update
 
-        self.noise_std = 0.3
-        self.NOISE_DECAY = 0.99
+        self.noise_std = 0.2
+        self.NOISE_DECAY = 0.8
         self.MIN_NOISE = 0.05
         
     def update_replay_memory(self, transition):
@@ -134,22 +156,24 @@ class AgentPortfolio:
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
 
         # Aktor - maksymalizacja oceny krytyka
         predicted_actions = self.actor(states)
         actor_loss = -self.critic(states, predicted_actions).mean()
+        
+        
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
         self.actor_optimizer.step()
 
         # Soft update target sieci
         self._soft_update(self.actor, self.target_actor)
         self._soft_update(self.critic, self.target_critic)
         
-        if self.noise_std > self.MIN_NOISE:
-            self.noise_std *= self.NOISE_DECAY
 
     def _soft_update(self, net, target_net):
         for target_param, param in zip(target_net.parameters(), net.parameters()):
@@ -195,7 +219,6 @@ def train_episode(env, episode, epsilon):
         #action_allocation_percentages = torch.sigmoid(action_allocation_percentages)  # Ensure 0-1 range
         #action_allocation_percentages = action_allocation_percentages.squeeze(0).cpu().numpy()  # [n_assets]
         #print(action_allocation_percentages)
-
         action = {
             'trader': trader.get_action(env.get_price_window(), target_model = True),
             'portfolio_manager': np.array([action_allocation_percentages]).flatten()
@@ -205,17 +228,28 @@ def train_episode(env, episode, epsilon):
         
 
         episode_reward += reward
+        
+        #if not np.isnan(action_allocation_percentages):
+        #print(action_allocation_percentages, reward)
         portfolio_manager.update_replay_memory((current_state, action, reward, new_state, done))
         
         #if np.random.random() >= .7:
         portfolio_manager.train(done)
+        #print(action_allocation_percentages)
+        # else:
+        #     print(current_state, reward)
+        #     return
 
         current_state = new_state
-        print(action_allocation_percentages)
+        #print(action_allocation_percentages, env.cash)
         step += 1
  
     if not episode % 2:
             print(f"Episode: {episode} Total Reward: {env.total_porfolio} Epsilon: {epsilon:.2f}")
+    
+    print(portfolio_manager.noise_std)
+    if portfolio_manager.noise_std > portfolio_manager.MIN_NOISE:
+        portfolio_manager.noise_std *= portfolio_manager.NOISE_DECAY
 
     return episode_reward
 
@@ -224,11 +258,11 @@ def train_episode(env, episode, epsilon):
 ticker = 'AAPL'
 train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
 training_set = pd.concat([train_df, val_df ,rl_df,test_df])
-training_set
+#training_set
 
 trader = DQNAgent()
-#load_dqn_agent(trader, 'aapl_best_agent_vc_dimOPT.pth')
-load_dqn_agent(trader, 'sinus_trader.pth')
+load_dqn_agent(trader, 'aapl_best_agent_vc_dimOPT.pth')
+#load_dqn_agent(trader, 'sinus_trader.pth')
 
 
 reward_all = []
@@ -241,8 +275,8 @@ data = training_set['close'].copy()
 data[ticker] = training_set['close']
 data = pd.DataFrame(data[ticker])
 
-data = np.sin(np.linspace(0, 500, 2500)).astype(np.float32)# + add_trend
-data = pd.DataFrame(data, columns=["close"])
+# data = np.sin(np.linspace(0, 500, 2500)).astype(np.float32) + 1
+# data = pd.DataFrame(data, columns=["close"])
 
 data_split = int(len(data)  * 0.8)
 
@@ -257,6 +291,9 @@ valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE)
 #super dla 200, batch64
 EPISODES = 50
 MIN_EPSILON = 0.001
+
+#state = np.random.get_state()
+#print(state)
 
 max_portfolio_manager = None
 max_reward = 0
@@ -274,13 +311,14 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     #if episode % evaluate_every:
     #render_env(valid_env)
     #if not episode % 1:
-    valid_env.reset()
+    
     # if max_portfolio_manager:
     #     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env, trader, max_portfolio_manager)
     # else:
+    valid_env.reset()
     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env, trader, portfolio_manager)
 
-    if not episode % 2:
+    if not episode % 1:
         render_env(valid_env)
     
     #print(env.portfolio_value_history)

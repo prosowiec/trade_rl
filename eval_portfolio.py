@@ -48,58 +48,81 @@ def render_env(env, title_suffix=""):
     buy_points = env.states_buy
     sell_points = env.states_sell
     allocations = env.states_allocation
+    shares_buy = env.shares_buy  # dodane: liczba akcji kupionych w danym kroku
+    shares_sell = env.shares_sell
     
-    for i, all in enumerate(allocations):
-        print(i, all)
-    #print(allocations)
+    # buy_points = [i + 96 for i in env.states_buy]
+    # sell_points = [i + 96 for i in env.states_sell]
+    
+    print("Alokacje:", env.states_allocation)
+    print("Kupione akcje:", env.shares_buy)
+    print("Sprzedane akcje:", env.shares_sell)
+    print("Pozycje",env.states_position)
+    print("cash_state",env.cash_state)
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
-
-    # Skalowanie alokacji - znajdź min i max
-    alloc_values = [float(a[0]) if isinstance(a, (list, np.ndarray)) else float(a) for a in allocations]
-    alloc_min = 0 #min(alloc_values) if alloc_values else 0
-    alloc_max = max(alloc_values) if alloc_values else 1
-    alloc_range = alloc_max - alloc_min if alloc_max != alloc_min else 1e-6
-
-    # Funkcja skalująca alokację na rozmiar markerów (min 50, max 300)
-    def scale_marker_size(alloc):
-        min_size, max_size = 50, 300
-        norm_alloc = (alloc - alloc_min) / alloc_range
-        return min_size + (max_size - min_size) * norm_alloc
-
-    def get_scalar_alloc(i):
-        a = allocations[i]
-        return float(a[0]) if isinstance(a, (list, np.ndarray)) else float(a)
 
     # Wykres ceny
     ax1.plot(prices, label='Cena', color='black', linewidth=1.5)
 
+    # Skalowanie rozmiaru markerów wg liczby akcji (dla kupna)
+    if shares_buy:
+        shares_min = min(shares_buy)
+        shares_max = max(shares_buy)
+    else:
+        shares_min, shares_max = 0, 1
+    shares_range = shares_max - shares_min if shares_max != shares_min else 1e-6
+
+    def scale_marker_size_by_shares(shares):
+        min_size, max_size = 50, 300
+        norm = (shares - shares_min) / shares_range
+        return min_size + (max_size - min_size) * norm
+
     if buy_points:
-        buy_sizes = [scale_marker_size(get_scalar_alloc(i)) if i < len(allocations) else 50 for i in buy_points]
+        buy_sizes = [
+            scale_marker_size_by_shares(shares_buy[j]) if j < len(shares_buy) else 50
+            for j in range(len(buy_points))
+        ]
         ax1.scatter(buy_points, prices[buy_points], color='green', marker='^', s=buy_sizes, label='Kup')
+
     if sell_points:
-        sell_sizes = [scale_marker_size(get_scalar_alloc(i)) if i < len(allocations) else 50 for i in sell_points]
+        # Dla uproszczenia: stały rozmiar markerów sprzedaży
+        sell_sizes = [
+            scale_marker_size_by_shares(shares_sell[j]) if j < len(shares_sell) else 50
+            for j in range(len(shares_sell))
+        ]
+
         ax1.scatter(sell_points, prices[sell_points], color='red', marker='v', s=sell_sizes, label='Sprzedaj')
 
+    # Tytuł z informacjami o wyniku agenta
     profit = np.round((env.total_porfolio - env.initial_cash) / env.initial_cash * 100, 2)
     ax1.set_ylabel('Cena aktywa')
     ax1.legend()
     ax1.grid(True)
-    ax1.set_title(f'Działania agenta {title_suffix}\nŁączny portfel: {env.total_porfolio} Otwarte pozycje {env.position} Profit {profit} %')
+    ax1.set_title(f'Działania agenta {title_suffix}\nŁączny portfel: {env.total_porfolio} '
+                  f'Otwarte pozycje {env.position} Profit {profit} %')
 
     # Wykres alokacji
     if allocations:
-        n = len(allocations)
-        alloc_filtered = np.full(n, np.nan)
-        for i in buy_points + sell_points:
-            if i < n:
-                alloc_filtered[i] = get_scalar_alloc(i)
-        ax2.bar(range(n), np.nan_to_num(alloc_filtered), color='blue', alpha=0.6)
+        def get_scalar_alloc(i):
+            a = allocations[i]
+            return float(a[0]) if isinstance(a, (list, np.ndarray)) else float(a)
 
-    ax2.set_ylim(alloc_min, alloc_max)
+        alloc_values = [get_scalar_alloc(i) for i in range(len(allocations))]
+        alloc_min = 0
+        alloc_max = max(alloc_values) if alloc_values else 1
+
+        alloc_filtered = np.full(len(allocations), np.nan)
+        for i in buy_points + sell_points:
+            if i < len(allocations):
+                alloc_filtered[i] = get_scalar_alloc(i)
+        ax2.bar(range(len(allocations)), np.nan_to_num(alloc_filtered), color='blue', alpha=0.6)
+
+        ax2.set_ylim(alloc_min, alloc_max)
+
     ax2.set_ylabel('Alokacja')
     ax2.set_xlabel('Krok czasowy')
     ax2.grid(True)
 
     plt.tight_layout()
-    plt.show(block=False)  # 👈 nie blokuje dalszego działania programu
-    plt.pause(0.5)       # 👈 aktualizuje rysunek (potrzebne przy block=False)
+    plt.show(block=False)
+    plt.pause(0.5)
