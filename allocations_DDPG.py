@@ -68,10 +68,10 @@ class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Actor, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_dim, 48), # Using the larger network from previous advice
-            nn.ReLU(),
-            nn.Linear(48, 16),
-            nn.ReLU(),
+            nn.Linear(state_dim, 16), # Using the larger network from previous advice
+            nn.Sigmoid(),
+            nn.Linear(16, 16),
+            nn.Sigmoid(),
             nn.Dropout(0.3),
             nn.Linear(16, action_dim),
             nn.Sigmoid()  # Zakres [-1, 1] dla każdej akcji
@@ -84,10 +84,10 @@ class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_dim + action_dim, 48),
-            nn.ReLU(),
-            nn.Linear(48, 16),
-            nn.ReLU(),
+            nn.Linear(state_dim + action_dim, 16),
+            nn.Sigmoid(),
+            nn.Linear(16, 16),
+            nn.Sigmoid(),
             nn.Dropout(0.3),
             nn.Linear(16, 1),
         )
@@ -100,7 +100,7 @@ class Critic(nn.Module):
 
 
 class AgentPortfolio:
-    def __init__(self, input_dim=97, action_dim=1):
+    def __init__(self, input_dim=27, action_dim=1):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -122,8 +122,8 @@ class AgentPortfolio:
         self.DISCOUNT = 0.999
         self.TAU = 1e-3  # do soft update
 
-        self.noise_std = 0.2
-        self.NOISE_DECAY = 0.8
+        self.noise_std = 0.3
+        self.NOISE_DECAY = 0.9
         self.MIN_NOISE = 0.05
         
     def update_replay_memory(self, transition):
@@ -287,7 +287,7 @@ WINDOW_SIZE = 96
 env = PortfolioEnv(train_data, window_size=WINDOW_SIZE)
 valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE)
 
-
+print('initilized')
 #super dla 200, batch64
 EPISODES = 50
 MIN_EPSILON = 0.001
@@ -302,9 +302,9 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     reward = train_episode(env ,episode,epsilon)
     
     
-    if epsilon > MIN_EPSILON:
-        epsilon *= EPSILON_DECAY
-        epsilon = max(MIN_EPSILON, epsilon)
+    # if epsilon > MIN_EPSILON:
+    #     epsilon *= EPSILON_DECAY
+    #     epsilon = max(MIN_EPSILON, epsilon)
 
     
     #reward_all.append(reward)
@@ -315,11 +315,12 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     # if max_portfolio_manager:
     #     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env, trader, max_portfolio_manager)
     # else:
+    
+    print("Renderuje środowisko walidacyjne")
     valid_env.reset()
     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env, trader, portfolio_manager)
 
-    if not episode % 1:
-        render_env(valid_env)
+    render_env(valid_env)
     
     #print(env.portfolio_value_history)
     print()
