@@ -255,12 +255,16 @@ def train_episode(env, episode, epsilon):
 
 
 
-ticker = 'AAPL'
-train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
-training_set = pd.concat([train_df, val_df ,rl_df,test_df])
+
+# ticker = 'AAPL'
+# train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
+# training_set = pd.concat([train_df, val_df ,rl_df,test_df])
 #training_set
 
+tickers = ['AAPL','GOOGL', 'CCL', 'NVDA']
+
 trader = DQNAgent()
+trader_paths = 
 load_dqn_agent(trader, 'aapl_best_agent_vc_dimOPT.pth')
 #load_dqn_agent(trader, 'sinus_trader.pth')
 
