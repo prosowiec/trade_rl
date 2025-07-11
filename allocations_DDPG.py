@@ -22,17 +22,6 @@ from eval_portfolio import evaluate_steps_portfolio, render_env
 from manager_env import PortfolioEnv
 import os
 
-# os.environ['CUDA_LAUNCH_BLOCKING']="1"
-# os.environ['TORCH_USE_CUDA_DSA'] = "1"
-
-# np.random.seed(2137)
-# torch.manual_seed(2137)  # dla CPU
-# torch.cuda.manual_seed(2137)  # dla GPU (jeśli używasz)
-# torch.cuda.manual_seed_all(2137)  # dla wszystkich GPU
-
-# Opcjonalnie: dla pełnej deterministyczności
-
-
 
 
 # class Actor(nn.Module):
@@ -78,6 +67,8 @@ class Actor(nn.Module):
         )
 
     def forward(self, state):
+        print(state.shape)
+
         return self.net(state)
 
 class Critic(nn.Module):
@@ -93,14 +84,17 @@ class Critic(nn.Module):
         )
 
     def forward(self, state, action):
-        x = torch.cat([state, action], dim=1)
+        #print(state.shape, action.shape)
+        #print(state)
+        #print(action)
+        x = torch.cat([state, action], dim=2)
         return self.net(x)
 
 
 
 
 class AgentPortfolio:
-    def __init__(self, input_dim=27, action_dim=1):
+    def __init__(self, input_dim=97, action_dim=1): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -141,7 +135,6 @@ class AgentPortfolio:
         
         actions = np.array([action['portfolio_manager'] for action in actions])
         actions = torch.tensor(actions, dtype=torch.float32).to(self.device)
-        
         rewards = torch.tensor(rewards, dtype=torch.float32).view(-1, 1).to(self.device)
         dones = torch.tensor(dones, dtype=torch.bool).view(-1, 1).to(self.device)
 
@@ -200,12 +193,14 @@ class AgentPortfolio:
 
 EPSILON_DECAY = 0.95
 
-def train_episode(env, episode, epsilon):
+def train_episode(env,trading_desk, episode, epsilon):
     episode_reward = 0
     step = 1
 
     
     current_state = env.reset()
+    print(current_state)
+    print(current_state.shape)
     done = False
     while not done:
 
@@ -219,8 +214,19 @@ def train_episode(env, episode, epsilon):
         #action_allocation_percentages = torch.sigmoid(action_allocation_percentages)  # Ensure 0-1 range
         #action_allocation_percentages = action_allocation_percentages.squeeze(0).cpu().numpy()  # [n_assets]
         #print(action_allocation_percentages)
+        
+        traders_actions = []
+        hist_data = env.get_price_window()
+        for i,key in enumerate(trading_desk.keys()):
+            curr_trader = trading_desk[key]
+            #print(hist_data.shape)
+            #print(hist_data)
+            traders_actions.append(curr_trader.get_action(hist_data[i,:], target_model = True))
+
+        #print(traders_actions)
         action = {
-            'trader': trader.get_action(env.get_price_window(), target_model = True),
+            #'trader': trader.get_action(env.get_price_window(), target_model = True),
+            'trader' : traders_actions,
             'portfolio_manager': np.array([action_allocation_percentages]).flatten()
         }
         
@@ -262,22 +268,33 @@ def train_episode(env, episode, epsilon):
 #training_set
 
 tickers = ['AAPL','GOOGL', 'CCL', 'NVDA']
+trading_desk = {}
+data = pd.DataFrame()
+for ticker in tickers:
+    trader = DQNAgent()
+    trader_path = f'{ticker.lower()}_best_agent_vc_dimOPT.pth'
+    load_dqn_agent(trader, trader_path)
+    trading_desk[ticker] = trader
+    #load_dqn_agent(trader, 'sinus_trader.pth')
+    
+    train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
+    training_set = pd.concat([train_df, val_df ,rl_df,test_df])
 
-trader = DQNAgent()
-trader_paths = 
-load_dqn_agent(trader, 'aapl_best_agent_vc_dimOPT.pth')
-#load_dqn_agent(trader, 'sinus_trader.pth')
+    temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
+    #print(temp.shape)
+    data = pd.concat([data, temp], axis=1)
+    #print(data)
+    #temp[ticker] = training_set['close']
+    #temp = pd.DataFrame(temp, columns=[ticker])
+    #print(temp)
 
-
+#print(data)
 reward_all = []
 evaluate_revards = []
 portfolio_manager = AgentPortfolio()
 epsilon = 1
 
 
-data = training_set['close'].copy()
-data[ticker] = training_set['close']
-data = pd.DataFrame(data[ticker])
 
 # data = np.sin(np.linspace(0, 500, 2500)).astype(np.float32) + 1
 # data = pd.DataFrame(data, columns=["close"])
@@ -303,7 +320,7 @@ max_portfolio_manager = None
 max_reward = 0
 evaluate_every = 1
 for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
-    reward = train_episode(env ,episode,epsilon)
+    reward = train_episode(env,trading_desk, episode,epsilon)
     
     
     # if epsilon > MIN_EPSILON:

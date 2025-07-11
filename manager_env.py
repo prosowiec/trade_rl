@@ -5,213 +5,128 @@ from gym import spaces
 import ta 
 
 class PortfolioEnv(gym.Env):
-    def __init__(self, close_data: pd.Series, window_size=96, initial_cash=10000.0,
+    def __init__(self, close_data: pd.DataFrame, window_size=96, initial_cash=10000.0,
                  transaction_cost=1, max_allocation=0.5):
         """
-        close_data: Series z cenami jednego aktywa, indeks = daty
+        close_data: DataFrame z cenami wielu aktywów (każda kolumna to inne aktywo)
         """
         super(PortfolioEnv, self).__init__()
         self.close_data = close_data
+        self.asset_names = close_data.columns.tolist()
+        self.n_assets = len(self.asset_names)
         self.window_size = window_size
         self.initial_cash = initial_cash
         self.transaction_cost = transaction_cost
         self.max_allocation = max_allocation
-        self.trader_action = 0
-        self.total_porfolio = initial_cash
-        self.cash = initial_cash
+
         self.action_space = spaces.Dict({
-            'trader': spaces.Discrete(3),  # 0=hold, 1=buy, 2=sell
-            'portfolio_manager': spaces.Box(low=0, high=1.0, shape=(1,), dtype=np.float32)
+            'trader': spaces.MultiDiscrete([3] * self.n_assets),  # 0=hold, 1=buy, 2=sell per asset
+            'portfolio_manager': spaces.Box(low=0.0, high=1.0, shape=(self.n_assets,), dtype=np.float32)
         })
-        self.indicators = PortfolioIndicators(self.window_size)
-        
-        # Obserwacja = okno cen + pozycja + gotówka + poprzednia akcja + alokacja
-        obs_len = self.window_size + 1 + 1 + 1 + 1  # close + position + cash + prev_trader + prev_alloc
+
+        # Przykład: okno cen (n_assets * window), pozycje, gotówka, akcje tradera, alokacja
+        obs_len = self.n_assets * window_size + self.n_assets + 1 + self.n_assets + self.n_assets
         self.observation_space = spaces.Box(low=0, high=1, shape=(obs_len,), dtype=np.float32)
-        self.position = 0
-        
-        self.states_buy = []
-        self.states_sell = []
-        self.states_allocation = []
-        self.shares_sell = []
-        self.shares_buy = []
-        self.states_position = []
-        
-        
+
+        self.indicators = PortfolioIndicators(window_size)
         self.reset()
 
-    def _get_obs(self):
-        window_start = max(0, self.current_step - self.window_size)
-        window = self.close_data.iloc[window_start:self.current_step].values.flatten()
-
-        min_val = np.min(window)
-        max_val = np.max(window)
-        market_data = ((window - min_val) / (max_val - min_val + 1e-8)).astype(np.float32)
-
-        current_price = self.close_data.iloc[self.current_step]
-        total_value = self.cash + self.position * current_price
-
-        norm_total_value = total_value / self.initial_cash
-        norm_position = (self.position * current_price) / self.initial_cash
-        cash_alloc = self.cash / (total_value + 1e-8)
-        asset_alloc = (self.position * current_price) / (total_value + 1e-8)
-
-        portfolio_info = np.array([
-            float(norm_position),
-            float(norm_total_value),
-            float(cash_alloc),
-            float(asset_alloc),
-            float(self.trader_action)
-        ], dtype=np.float32)
-
-        indicators = self.indicators.calculate_all_indicators(self.close_data,self.current_step, self.portfolio_value_history,
-                                                              self.cash, self.position, current_price)
-
-        return np.round(np.concatenate([
-            #market_data,
-            portfolio_info,
-            indicators
-        ]), 4)
-    
     def reset(self):
         self.current_step = self.window_size
         self.cash = self.initial_cash
-        self.position = 0.0  # liczba akcji
-        self.prev_trader_action = 0
-        self.prev_allocation = 0.0
-        self.trader_action = 0
+        self.position = np.zeros(self.n_assets)  # ilość akcji każdego aktywa
+        self.prev_trader_action = np.zeros(self.n_assets)
+        self.prev_allocation = np.zeros(self.n_assets)
+        self.trader_action = np.zeros(self.n_assets)
         self.portfolio_value_history = []
-        self.total_porfolio = self.initial_cash
-        
-        self.shares_sell = []
-        self.shares_buy = []
-        self.states_buy = []
-        self.states_sell = []
-        self.states_allocation = []
-        self.states_position = []
-        self.cash_state = []
-
         return self._get_obs()
 
+    def _get_obs(self):
+        window_start = max(0, self.current_step - self.window_size)
+        curr_prices = self.close_data.iloc[window_start:self.current_step].values  # shape: (window, n_assets)
+        #curr_prices = self.close_data.iloc[self.current_step].values  # shape: (n_assets,)
+        #print(curr_prices)
+        # Normalizacja bieżących cen (min-max z całego dostępnego zakresu)
+        min_vals = self.close_data.min().values
+        max_vals = self.close_data.max().values
+        norm_prices = (curr_prices - min_vals) / (max_vals - min_vals + 1e-8)  # shape: (n_assets,)
 
+        # Zakładamy, że prev_trader_action ma shape (n_assets,) i zawiera 0/1/2
+        # Możesz też zakodować jako one-hot, ale tutaj normalizujemy: 0.0 (hold), 0.5 (buy), 1.0 (sell)
+        norm_actions = self.trader_action / 2.0
+        norm_actions = norm_actions[:, np.newaxis]  
+        #print(norm_prices.T)
+        #print(norm_actions)
+        # Łączenie cen i decyzji per aktywo
+        obs = np.concatenate([norm_prices.T, norm_actions], axis=1)  # shape: (n_assets, 2)
+
+        return np.round(obs, 4)
+    
     def step(self, action):
         executed = False
-        self.trader_action = action['trader']
-        allocation = action['portfolio_manager'][0] #* self.max_allocation
-        curr_price = self.close_data.iloc[self.current_step].values[0]
-        prev_price = self.close_data.iloc[self.current_step - 1].values[0]
-        prev_value = self.cash + self.position * prev_price
-        transaction_cost = 0
+        self.trader_action = np.array(action['trader'])
+        allocation = np.array(action['portfolio_manager'])
+        curr_prices = self.close_data.iloc[self.current_step].values
+        prev_prices = self.close_data.iloc[self.current_step - 1].values
+        prev_value = self.cash + np.sum(self.position * prev_prices)
+        transaction_cost_total = 0
 
-        
+        if np.any(np.isnan(allocation)) or np.any(allocation < 0) or np.any(allocation > 1):
+            return self._get_obs(), -1.0, False, {'error': 'Invalid allocation'}
 
-        if self.current_step >= len(self.close_data):
-            return self._get_obs(), 0.0, True, {}
-
-        if np.round(allocation,3) == 0.0 and self.trader_action != 0 and self.current_step + 1< len(self.close_data) - 1:
-            # Return penalty and current state unchanged
-            return self._get_obs(), -0.1, False, {'error': 'Invalid allocation'}
-        
-        if np.isnan(allocation) or allocation < 0 or allocation > 1 and self.current_step  + 1< len(self.close_data) - 1:
-            # Return penalty and current state unchanged
-            return self._get_obs(), -1, False, {'error': 'Invalid allocation'}
-
-        
-        if self.trader_action == 1:  # BUY
-            max_cash_available = self.cash - self.transaction_cost  # uwzględnij koszt stały
-            
-            if max_cash_available > 0:
-                invest_amount = max_cash_available * allocation
-                total_spend = invest_amount + self.transaction_cost
-                shares = invest_amount / curr_price
-                if total_spend <= self.cash:
-                    
-                    #print(shares,invest_amount,allocation, invest_amount / curr_price )
-                    real_invest = shares * curr_price
-                    total_spend = real_invest + self.transaction_cost
-                    
-                    if total_spend <= self.cash:
-                        self.position += shares
-                        self.cash -= total_spend
-                        transaction_cost += self.transaction_cost
-                        executed = True
-                        self.states_buy.append(self.current_step)
-                        self.shares_buy.append(shares)             
-                
-                
-        elif self.trader_action == 2:  # SELL
-            shares = self.position * allocation
-            #print(shares,allocation )
-            if shares > 0:
-                revenue = shares * curr_price
-                net_revenue = revenue #- self.transaction_cost
-                if net_revenue > 0:
-                    self.position -= shares
-                    self.cash += net_revenue
-                    #transaction_cost += self.transaction_cost
+        for i in range(self.n_assets):
+            act = self.trader_action[i]
+            alloc = allocation[i]
+            price = curr_prices[i]
+            if act == 1:  # BUY
+                invest_amount = self.cash * alloc
+                cost = invest_amount + self.transaction_cost
+                shares = invest_amount / price
+                if cost <= self.cash:
+                    self.position[i] += shares
+                    self.cash -= cost
+                    transaction_cost_total += self.transaction_cost
                     executed = True
-                    self.states_sell.append(self.current_step)
-                    self.shares_sell.append(shares)        
-                    
-        if executed:
-            self.states_allocation.append(allocation)
-            self.states_position.append(self.position)
-            
-        self.cash_state.append(self.cash)
-        curr_value = self.cash + self.position * curr_price
-        
-        self.total_porfolio = curr_value
-        portfolio_return = (curr_value - prev_value) / (prev_value + 1e-8) 
-        entropy_coeff = 0.01  # Współczynnik entropii, można dostosować
-        #reward = portfolio_return   #np.log(1 + portfolio_return + 1e-8) - transaction_cost / (prev_value + 1e-8)
-        entropy = - (allocation * np.log(allocation + 1e-8) + (1 - allocation) * np.log(1 - allocation + 1e-8))
-        reward = allocation * portfolio_return + entropy_coeff * entropy    
-        #reward = np.log(1 + max(0, portfolio_return)) * allocation - np.log(1 - min(0, portfolio_return)) * (1 - allocation)
+            elif act == 2:  # SELL
+                shares_to_sell = self.position[i] * alloc
+                if shares_to_sell > 0:
+                    revenue = shares_to_sell * price
+                    self.position[i] -= shares_to_sell
+                    self.cash += revenue  # koszt transakcji pomijany przy sprzedaży
+                    executed = True
 
-        # allocation_penalty = -0.01 * (allocation)  # im mniej zainwestowane, tym gorzej
-        # reward += allocation_penalty
+        curr_value = self.cash + np.sum(self.position * curr_prices)
+        portfolio_return = (curr_value - prev_value) / (prev_value + 1e-8)
 
-        # 3. Kara za zbyt częste zmiany alokacji (np. skoki z 0 do 1)
-        
-        
-        #allocation_change_penalty = -0.2 * abs(allocation - prev_action)
-        #reward += allocation_change_penalty
-        
-        # if self.trader_action != 0 and not executed:
-        #     reward -= 200 # kara za niewykonaną transakcję
-        
-        # if invest_amount > self.cash and self.trader_action == 1:
-        #     reward -= 10
+        entropy_coeff = 0.01
+        entropy = -np.sum(allocation * np.log(allocation + 1e-8) + (1 - allocation) * np.log(1 - allocation + 1e-8))
+        reward = np.dot(allocation, portfolio_return ) + entropy_coeff * entropy #* np.ones(self.n_assets)
+        reward = np.clip(reward, -1.0, 1.0)
 
-        # elif executed:
-        #     reward += 50
-
-        self.prev_trader_action = self.trader_action
-        self.prev_allocation = allocation
+        self.prev_trader_action = self.trader_action.copy()
+        self.prev_allocation = allocation.copy()
         self.portfolio_value_history.append(curr_value)
         self.current_step += 1
-
         done = self.current_step >= len(self.close_data) - 1
+
         info = {
             'portfolio_value': curr_value,
             'cash': self.cash,
-            'position': self.position,
-            'transaction_cost': transaction_cost,
+            'position': self.position.copy(),
+            'transaction_cost': transaction_cost_total,
             'return': portfolio_return,
             'executed': executed
         }
-        reward = np.clip(reward, -1.0, 1.0)  
-        
         return self._get_obs(), reward, done, info
-        
+
     def get_portfolio_allocation(self):
-        price = self.close_data.iloc[self.current_step - 1] if self.current_step > 0 else self.close_data.iloc[0]
-        total_value = self.cash + self.position * price
+        price = self.close_data.iloc[self.current_step - 1].values
+        total_value = self.cash + np.sum(self.position * price)
         return {
             'asset_allocation': (self.position * price) / (total_value + 1e-8),
             'cash_allocation': self.cash / (total_value + 1e-8),
             'total_value': total_value,
-            'shares': self.position
+            'shares': self.position.copy()
         }
 
     def sample_action(self):
@@ -221,12 +136,26 @@ class PortfolioEnv(gym.Env):
         }
 
     def get_price_window(self):
+        # window_start = max(0, self.current_step - self.window_size)
+        # window = self.close_data.iloc[window_start:self.current_step].values.T
+        # norm_prices = []
+        # for prices in window:
+        #     min_val = np.min(prices)
+        #     max_val = np.max(prices)
+        #     norm = (prices - min_val) / (max_val - min_val + 1e-8)
+        #     norm_prices.append(norm)
         window_start = max(0, self.current_step - self.window_size)
-        window = self.close_data.iloc[window_start:self.current_step].values.flatten()
-        min_val = np.min(window)
-        max_val = np.max(window)
-        market_data = ((window - min_val) / (max_val - min_val + 1e-8)).astype(np.float32)
-        return market_data
+        curr_prices = self.close_data.iloc[window_start:self.current_step].values  # shape: (window, n_assets)
+        #curr_prices = self.close_data.iloc[self.current_step].values  # shape: (n_assets,)
+        #print(curr_prices)
+        # Normalizacja bieżących cen (min-max z całego dostępnego zakresu)
+        min_vals = self.close_data.min().values
+        max_vals = self.close_data.max().values
+        norm_prices = (curr_prices - min_vals) / (max_vals - min_vals + 1e-8)  # shape: (n_assets,)
+        
+        #norm_actions = norm_actions[:, np.newaxis]  
+
+        return np.array(norm_prices).T
 
 
 class PortfolioIndicators:
