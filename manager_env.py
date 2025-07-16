@@ -18,6 +18,7 @@ class PortfolioEnv(gym.Env):
         self.initial_cash = initial_cash
         self.transaction_cost = transaction_cost
         self.max_allocation = max_allocation
+        self.total_portfolio = initial_cash
 
         self.action_space = spaces.Dict({
             'trader': spaces.MultiDiscrete([3] * self.n_assets),  # 0=hold, 1=buy, 2=sell per asset
@@ -34,11 +35,20 @@ class PortfolioEnv(gym.Env):
     def reset(self):
         self.current_step = self.window_size
         self.cash = self.initial_cash
+        self.total_portfolio = self.initial_cash
         self.position = np.zeros(self.n_assets)  # ilość akcji każdego aktywa
         self.prev_trader_action = np.zeros(self.n_assets)
         self.prev_allocation = np.zeros(self.n_assets)
         self.trader_action = np.zeros(self.n_assets)
         self.portfolio_value_history = []
+        
+        # Initialize visualization tracking arrays
+        self.states_buy = [[] for _ in range(self.n_assets)]
+        self.states_sell = [[] for _ in range(self.n_assets)]
+        self.states_allocation = [[] for _ in range(self.n_assets)]
+        self.shares_buy = [[] for _ in range(self.n_assets)]
+        self.shares_sell = [[] for _ in range(self.n_assets)]
+        
         return self._get_obs()
 
     def _get_obs(self):
@@ -77,7 +87,12 @@ class PortfolioEnv(gym.Env):
         for i in range(self.n_assets):
             act = self.trader_action[i]
             alloc = allocation[i]
+            #print(alloc)
             price = curr_prices[i]
+            
+            # Track allocation for each asset at each step
+            self.states_allocation[i].append(alloc)
+            
             if act == 1:  # BUY
                 invest_amount = self.cash * alloc
                 cost = invest_amount + self.transaction_cost
@@ -87,6 +102,14 @@ class PortfolioEnv(gym.Env):
                     self.cash -= cost
                     transaction_cost_total += self.transaction_cost
                     executed = True
+                    
+                    # Track buy action
+                    self.states_buy[i].append(self.current_step)
+                    self.shares_buy[i].append(shares)
+                else:
+                    # Track failed buy attempt (optional)
+                    self.shares_buy[i].append(0)
+                    
             elif act == 2:  # SELL
                 shares_to_sell = self.position[i] * alloc
                 if shares_to_sell > 0:
@@ -94,15 +117,27 @@ class PortfolioEnv(gym.Env):
                     self.position[i] -= shares_to_sell
                     self.cash += revenue  # koszt transakcji pomijany przy sprzedaży
                     executed = True
+                    
+                    # Track sell action
+                    self.states_sell[i].append(self.current_step)
+                    self.shares_sell[i].append(shares_to_sell)
+                else:
+                    # Track failed sell attempt (optional)
+                    self.shares_sell[i].append(0)
+            else:
+                # For hold actions, add 0 shares
+                self.shares_buy[i].append(0)
+                self.shares_sell[i].append(0)
 
         curr_value = self.cash + np.sum(self.position * curr_prices)
+        self.total_portfolio = curr_value
         portfolio_return = (curr_value - prev_value) / (prev_value + 1e-8)
 
         entropy_coeff = 0.01
         entropy = -np.sum(allocation * np.log(allocation + 1e-8) + (1 - allocation) * np.log(1 - allocation + 1e-8))
         reward = np.dot(allocation, portfolio_return ) + entropy_coeff * entropy #* np.ones(self.n_assets)
         reward = np.clip(reward, -1.0, 1.0)
-
+        #print(reward)
         self.prev_trader_action = self.trader_action.copy()
         self.prev_allocation = allocation.copy()
         self.portfolio_value_history.append(curr_value)
@@ -156,7 +191,40 @@ class PortfolioEnv(gym.Env):
         #norm_actions = norm_actions[:, np.newaxis]  
 
         return np.array(norm_prices).T
-
+    
+    def get_visualization_data(self, asset_index):
+        """
+        Get visualization data for a specific asset
+        
+        Args:
+            asset_index: Index of the asset (0 to n_assets-1)
+            
+        Returns:
+            dict: Dictionary containing visualization data
+        """
+        if asset_index >= self.n_assets:
+            raise ValueError(f"Asset index {asset_index} out of range. Max index: {self.n_assets-1}")
+            
+        return {
+            'prices': self.close_data[self.asset_names[asset_index]].values,
+            'buy_points': self.states_buy[asset_index],
+            'sell_points': self.states_sell[asset_index],
+            'allocations': self.states_allocation[asset_index],
+            'shares_buy': self.shares_buy[asset_index],
+            'shares_sell': self.shares_sell[asset_index]
+        }
+    
+    def get_all_visualization_data(self):
+        """
+        Get visualization data for all assets
+        
+        Returns:
+            dict: Dictionary with asset names as keys and visualization data as values
+        """
+        all_data = {}
+        for i, asset_name in enumerate(self.asset_names):
+            all_data[asset_name] = self.get_visualization_data(i)
+        return all_data
 
 class PortfolioIndicators:
     def __init__(self, window_size=96):

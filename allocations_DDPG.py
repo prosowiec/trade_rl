@@ -18,83 +18,99 @@ from source.database import read_stock_data
 from copy import deepcopy
 #from enviroments import TimeSeriesEnv_simple
 from gym import spaces
-from eval_portfolio import evaluate_steps_portfolio, render_env
+from eval_portfolio import evaluate_steps_portfolio, render_env, render_portfolio_summary
 from manager_env import PortfolioEnv
 import os
-
 
 
 # class Actor(nn.Module):
 #     def __init__(self, state_dim, action_dim):
 #         super(Actor, self).__init__()
 #         self.net = nn.Sequential(
-#             nn.Linear(state_dim, 6), # Using the larger network from previous advice
-#             # nn.ReLU(),
-#             # nn.Linear(64, 32),
-#             nn.ReLU(),
-#             nn.Linear(6, action_dim),
-#             nn.Sigmoid()  # Zakres [-1, 1] dla każdej akcji
+#             nn.Linear(state_dim, 16), # Using the larger network from previous advice
+#             nn.Sigmoid(),
+#             nn.Linear(16, 16),
+#             nn.Sigmoid(),
+#             nn.Dropout(0.3),
+#             nn.Linear(16, action_dim),
+#             nn.Softmax(dim=1)  # Zakres [-1, 1] dla każdej akcji
 #         )
 
 #     def forward(self, state):
-#         return self.net(state)
+#         return self.net(state).squeeze(-1)
 
 # class Critic(nn.Module):
 #     def __init__(self, state_dim, action_dim):
 #         super(Critic, self).__init__()
 #         self.net = nn.Sequential(
-#             nn.Linear(state_dim + action_dim, 6),
-#             # nn.ReLU(),
-#             # nn.Linear(64, 32),
-#             nn.ReLU(),
-#             nn.Linear(6, 1),
+#             nn.Linear(state_dim + action_dim, 16),
+#             nn.Sigmoid(),
+#             nn.Linear(16, 16),
+#             nn.Sigmoid(),
+#             nn.Dropout(0.3),
+#             nn.Linear(16, 1),
 #         )
 
 #     def forward(self, state, action):
+#         print(state.shape, action.shape)
+#         #print(state)
+#         #print(action)
 #         x = torch.cat([state, action], dim=1)
 #         return self.net(x)
+
+
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim):
+    def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(state_dim, 16), # Using the larger network from previous advice
-            nn.Sigmoid(),
-            nn.Linear(16, 16),
-            nn.Sigmoid(),
-            nn.Dropout(0.3),
-            nn.Linear(16, action_dim),
-            nn.Sigmoid()  # Zakres [-1, 1] dla każdej akcji
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels=97, out_channels=32, kernel_size=1),  # 97 = liczba cech
+            nn.ReLU(),
+            nn.Conv1d(32, 64, kernel_size=1),
+            nn.ReLU()
+        )
+        self.fc = nn.Sequential(
+            nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
+            nn.Linear(64 * 4, 64),
+            nn.ReLU(),
+            nn.Linear(64, 4),        # action_dim = liczba alokacji
+            nn.Softmax(dim=-1)                # ładne rozkłady alokacji
         )
 
     def forward(self, state):
-        print(state.shape)
-
-        return self.net(state)
-
+        #print(state.shape)
+        x = state.permute(0, 2, 1)  # [B, 4, 97] → [B, 97, 4]
+        x = self.conv(x)            # [B, 64, 4]
+        x = self.fc(x)              # [B, 4]
+        return x
+        
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(state_dim + action_dim, 16),
-            nn.Sigmoid(),
-            nn.Linear(16, 16),
-            nn.Sigmoid(),
-            nn.Dropout(0.3),
-            nn.Linear(16, 1),
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels=97, out_channels=32, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv1d(32, 64, kernel_size=1),
+            nn.ReLU()
+        )
+        self.fc = nn.Sequential(
+            nn.Flatten(),                            # [B, 64, 4] → [B, 256]
+            nn.Linear(64 * 4 + action_dim, 64),      # dodajemy akcje
+            nn.ReLU(),
+            nn.Linear(64, 4)
         )
 
     def forward(self, state, action):
-        #print(state.shape, action.shape)
-        #print(state)
-        #print(action)
-        x = torch.cat([state, action], dim=2)
-        return self.net(x)
-
+        x = state.permute(0, 2, 1)                   # [B, 97, 4]
+        x = self.conv(x)                             # [B, 64, 4]
+        x = x.flatten(start_dim=1)                   # [B, 256]
+        x = torch.cat([x, action], dim=1)            # [B, 256 + 4]
+        x = self.fc(x)                               # [B, 1]
+        return x
 
 
 
 class AgentPortfolio:
-    def __init__(self, input_dim=97, action_dim=1): #27 * 4
+    def __init__(self, input_dim=97, action_dim=4): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -134,17 +150,22 @@ class AgentPortfolio:
         next_states = torch.tensor(np.array(next_states), dtype=torch.float32).to(self.device)
         
         actions = np.array([action['portfolio_manager'] for action in actions])
+        #print(actions.shape)
         actions = torch.tensor(actions, dtype=torch.float32).to(self.device)
-        rewards = torch.tensor(rewards, dtype=torch.float32).view(-1, 1).to(self.device)
-        dones = torch.tensor(dones, dtype=torch.bool).view(-1, 1).to(self.device)
-
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        dones = torch.tensor(dones, dtype=torch.bool).to(self.device)
+        dones = dones.unsqueeze(1).expand(64, 1)
         # Krytyk - target Q
         with torch.no_grad():
             next_actions = self.target_actor(next_states)
+            #print(next_actions.shape)
+            #print(next_actions)
             target_q = self.target_critic(next_states, next_actions)
+            #print(target_q.shape, rewards.shape, dones.shape)
             target_q = rewards + (~dones) * self.DISCOUNT * target_q
 
         current_q = self.critic(states, actions)
+        #print(current_q.shape, target_q.shape)
         critic_loss = self.loss_fn(current_q, target_q)
 
         self.critic_optimizer.zero_grad()
@@ -152,7 +173,6 @@ class AgentPortfolio:
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
 
-        # Aktor - maksymalizacja oceny krytyka
         predicted_actions = self.actor(states)
         actor_loss = -self.critic(states, predicted_actions).mean()
         
@@ -175,14 +195,14 @@ class AgentPortfolio:
     def get_action(self, state, noise_std=0.1):
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         with torch.no_grad():
-            action = self.actor(state).cpu().numpy()[0]
+            action = self.actor(state).cpu().numpy()
         noise = np.random.normal(0, self.noise_std, size=action.shape)
         return np.clip(action + noise, 0, 1)
     
     def get_action_target(self, state):
         state = state.clone().detach().float().unsqueeze(0).to(self.device)
         with torch.no_grad():
-            action = self.target_actor(state).cpu().numpy()[0]
+            action = self.target_actor(state).cpu().numpy()
 
         return np.clip(action, 0, 1)
 
@@ -199,8 +219,8 @@ def train_episode(env,trading_desk, episode, epsilon):
 
     
     current_state = env.reset()
-    print(current_state)
-    print(current_state.shape)
+    #print(current_state)
+    #print(current_state.shape)
     done = False
     while not done:
 
@@ -251,7 +271,7 @@ def train_episode(env,trading_desk, episode, epsilon):
         step += 1
  
     if not episode % 2:
-            print(f"Episode: {episode} Total Reward: {env.total_porfolio} Epsilon: {epsilon:.2f}")
+            print(f"Episode: {episode} Total Reward: {env.total_portfolio} Epsilon: {epsilon:.2f}")
     
     print(portfolio_manager.noise_std)
     if portfolio_manager.noise_std > portfolio_manager.MIN_NOISE:
@@ -339,9 +359,10 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     
     print("Renderuje środowisko walidacyjne")
     valid_env.reset()
-    reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env, trader, portfolio_manager)
+    reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env,trading_desk, portfolio_manager)
 
     render_env(valid_env)
+    render_portfolio_summary(valid_env)
     
     #print(env.portfolio_value_history)
     print()
