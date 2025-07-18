@@ -270,7 +270,7 @@ def render_portfolio_summary(env, title_suffix=""):
         ax1.plot(env.portfolio_value_history, color='darkgreen', linewidth=2)
         ax1.axhline(y=env.initial_cash, color='red', linestyle='--', alpha=0.7, label='Kapitał początkowy')
         profit_pct = (env.portfolio_value_history[-1] - env.initial_cash) / env.initial_cash * 100
-        ax1.set_title(f'Wartość portfela w czasie\nProfit: {profit_pct:.2f}%')
+        ax1.set_title(f'Wartość portfela w czasie\nProfit: {profit_pct:.2f}% Wartość końcowa: {env.portfolio_value_history[-1]:.2f}')
         ax1.set_ylabel('Wartość portfela')
         ax1.grid(True)
         ax1.legend()

@@ -65,14 +65,14 @@ class Actor(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv1d(in_channels=97, out_channels=32, kernel_size=1),  # 97 = liczba cech
             nn.ReLU(),
-            nn.Conv1d(32, 64, kernel_size=1),
+            nn.Conv1d(32, 8, kernel_size=1),
             nn.ReLU()
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(64 * 4, 64),
+            nn.Linear(8 * 4, 8),
             nn.ReLU(),
-            nn.Linear(64, 4),        # action_dim = liczba alokacji
+            nn.Linear(8, 4),        # action_dim = liczba alokacji
             nn.Softmax(dim=-1)                # ładne rozkłady alokacji
         )
 
@@ -89,14 +89,14 @@ class Critic(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv1d(in_channels=97, out_channels=32, kernel_size=1),
             nn.ReLU(),
-            nn.Conv1d(32, 64, kernel_size=1),
+            nn.Conv1d(32, 8, kernel_size=1),
             nn.ReLU()
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
-            nn.Linear(64 * 4 + action_dim, 64),      # dodajemy akcje
+            nn.Linear(8 * 4 + action_dim, 8),      # dodajemy akcje
             nn.ReLU(),
-            nn.Linear(64, 4)
+            nn.Linear(8, 4)
         )
 
     def forward(self, state, action):
@@ -361,7 +361,7 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     valid_env.reset()
     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env,trading_desk, portfolio_manager)
 
-    render_env(valid_env)
+    #render_env(valid_env)
     render_portfolio_summary(valid_env)
     
     #print(env.portfolio_value_history)

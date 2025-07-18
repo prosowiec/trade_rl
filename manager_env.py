@@ -54,20 +54,15 @@ class PortfolioEnv(gym.Env):
     def _get_obs(self):
         window_start = max(0, self.current_step - self.window_size)
         curr_prices = self.close_data.iloc[window_start:self.current_step].values  # shape: (window, n_assets)
-        #curr_prices = self.close_data.iloc[self.current_step].values  # shape: (n_assets,)
-        #print(curr_prices)
-        # Normalizacja bieżących cen (min-max z całego dostępnego zakresu)
+
         min_vals = self.close_data.min().values
         max_vals = self.close_data.max().values
         norm_prices = (curr_prices - min_vals) / (max_vals - min_vals + 1e-8)  # shape: (n_assets,)
 
-        # Zakładamy, że prev_trader_action ma shape (n_assets,) i zawiera 0/1/2
-        # Możesz też zakodować jako one-hot, ale tutaj normalizujemy: 0.0 (hold), 0.5 (buy), 1.0 (sell)
+
         norm_actions = self.trader_action / 2.0
         norm_actions = norm_actions[:, np.newaxis]  
-        #print(norm_prices.T)
-        #print(norm_actions)
-        # Łączenie cen i decyzji per aktywo
+
         obs = np.concatenate([norm_prices.T, norm_actions], axis=1)  # shape: (n_assets, 2)
 
         return np.round(obs, 4)
