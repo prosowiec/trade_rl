@@ -18,52 +18,16 @@ from source.database import read_stock_data
 from copy import deepcopy
 #from enviroments import TimeSeriesEnv_simple
 from gym import spaces
-from eval_portfolio import evaluate_steps_portfolio, render_env, render_portfolio_summary
-from manager_env import PortfolioEnv
+from eval_models import evaluate_steps, render_env
+from enviroments import TimeSeriesEnvOHLC
 import os
-
-
-# class Actor(nn.Module):
-#     def __init__(self, state_dim, action_dim):
-#         super(Actor, self).__init__()
-#         self.net = nn.Sequential(
-#             nn.Linear(state_dim, 16), # Using the larger network from previous advice
-#             nn.Sigmoid(),
-#             nn.Linear(16, 16),
-#             nn.Sigmoid(),
-#             nn.Dropout(0.3),
-#             nn.Linear(16, action_dim),
-#             nn.Softmax(dim=1)  # Zakres [-1, 1] dla każdej akcji
-#         )
-
-#     def forward(self, state):
-#         return self.net(state).squeeze(-1)
-
-# class Critic(nn.Module):
-#     def __init__(self, state_dim, action_dim):
-#         super(Critic, self).__init__()
-#         self.net = nn.Sequential(
-#             nn.Linear(state_dim + action_dim, 16),
-#             nn.Sigmoid(),
-#             nn.Linear(16, 16),
-#             nn.Sigmoid(),
-#             nn.Dropout(0.3),
-#             nn.Linear(16, 1),
-#         )
-
-#     def forward(self, state, action):
-#         print(state.shape, action.shape)
-#         #print(state)
-#         #print(action)
-#         x = torch.cat([state, action], dim=1)
-#         return self.net(x)
 
 
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=97, out_channels=32, kernel_size=1),  # 97 = liczba cech
+            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),  # 97 = liczba cech
             nn.ReLU(),
             nn.Conv1d(32, 8, kernel_size=1),
             nn.ReLU()
@@ -72,8 +36,8 @@ class Actor(nn.Module):
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
             nn.Linear(8 * 4, 8),
             nn.ReLU(),
-            nn.Linear(8, 4),        # action_dim = liczba alokacji
-            nn.Softmax(dim=-1)                # ładne rozkłady alokacji
+            nn.Linear(8, 1),        # action_dim = liczba alokacji
+            nn.Tanh()                # ładne rozkłady alokacji
         )
 
     def forward(self, state):
@@ -87,7 +51,7 @@ class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=97, out_channels=32, kernel_size=1),
+            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
             nn.ReLU(),
             nn.Conv1d(32, 8, kernel_size=1),
             nn.ReLU()
@@ -96,7 +60,7 @@ class Critic(nn.Module):
             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
             nn.Linear(8 * 4 + action_dim, 8),      # dodajemy akcje
             nn.ReLU(),
-            nn.Linear(8, 4)
+            nn.Linear(8, 1)
         )
 
     def forward(self, state, action):
@@ -105,12 +69,12 @@ class Critic(nn.Module):
         x = x.flatten(start_dim=1)                   # [B, 256]
         x = torch.cat([x, action], dim=1)            # [B, 256 + 4]
         x = self.fc(x)                               # [B, 1]
-        return x
+        return x.flatten()
 
 
 
-class AgentPortfolio:
-    def __init__(self, input_dim=97, action_dim=4): #27 * 4
+class AgentTrader:
+    def __init__(self, input_dim=96, action_dim=1): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -149,17 +113,15 @@ class AgentPortfolio:
         states = torch.tensor(np.array(states), dtype=torch.float32).to(self.device)
         next_states = torch.tensor(np.array(next_states), dtype=torch.float32).to(self.device)
         
-        actions = np.array([action['portfolio_manager'] for action in actions])
+        #actions = np.array([action['portfolio_manager'] for action in actions])
         #print(actions.shape)
         actions = torch.tensor(actions, dtype=torch.float32).to(self.device)
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         dones = torch.tensor(dones, dtype=torch.bool).to(self.device)
-        dones = dones.unsqueeze(1).expand(64, 1)
+        #dones = dones.unsqueeze(1).expand(64, 1)
         # Krytyk - target Q
         with torch.no_grad():
             next_actions = self.target_actor(next_states)
-            #print(next_actions.shape)
-            #print(next_actions)
             target_q = self.target_critic(next_states, next_actions)
             #print(target_q.shape, rewards.shape, dones.shape)
             target_q = rewards + (~dones) * self.DISCOUNT * target_q
@@ -197,14 +159,14 @@ class AgentPortfolio:
         with torch.no_grad():
             action = self.actor(state).cpu().numpy()
         noise = np.random.normal(0, self.noise_std, size=action.shape)
-        return np.clip(action + noise, 0, 1)
+        return np.clip(action + noise, -1, 1).flatten()
     
     def get_action_target(self, state):
         state = state.clone().detach().float().unsqueeze(0).to(self.device)
         with torch.no_grad():
             action = self.target_actor(state).cpu().numpy()
 
-        return np.clip(action, 0, 1)
+        return np.clip(action, -1, 1).flatten()
 
 
     
@@ -213,7 +175,7 @@ class AgentPortfolio:
 
 EPSILON_DECAY = 0.95
 
-def train_episode(env,trading_desk, episode, epsilon):
+def train_episode(env, episode, epsilon):
     episode_reward = 0
     step = 1
 
@@ -228,54 +190,30 @@ def train_episode(env,trading_desk, episode, epsilon):
         #     action_allocation_percentages = torch.rand((1,), dtype=torch.float32)
         #     action_allocation_percentages = action_allocation_percentages.squeeze(0).cpu().numpy()  # [n_assets]
         # else:
-        
-        action_allocation_percentages = portfolio_manager.get_action(current_state)
-        #print(action_allocation_percentages)
-        #action_allocation_percentages = torch.sigmoid(action_allocation_percentages)  # Ensure 0-1 range
-        #action_allocation_percentages = action_allocation_percentages.squeeze(0).cpu().numpy()  # [n_assets]
-        #print(action_allocation_percentages)
-        
-        traders_actions = []
-        hist_data = env.get_price_window()
-        for i,key in enumerate(trading_desk.keys()):
-            curr_trader = trading_desk[key]
-            #print(hist_data.shape)
-            #print(hist_data)
-            traders_actions.append(curr_trader.get_action(hist_data[i,:], target_model = True))
-
-        #print(traders_actions)
-        action = {
-            #'trader': trader.get_action(env.get_price_window(), target_model = True),
-            'trader' : traders_actions,
-            'portfolio_manager': np.array([action_allocation_percentages]).flatten()
-        }
-        
-        new_state, reward, done, info = env.step(action)
+        #print(current_state)
+        action = trader.get_action(current_state)
+        #print(action)
+        #print(action.shape)
+        #print(current_state)
+        new_state, reward, done = env.step(action)
         
 
         episode_reward += reward
         
-        #if not np.isnan(action_allocation_percentages):
-        #print(action_allocation_percentages, reward)
-        portfolio_manager.update_replay_memory((current_state, action, reward, new_state, done))
+        trader.update_replay_memory((current_state, action, reward, new_state, done))
         
         #if np.random.random() >= .7:
-        portfolio_manager.train(done)
-        #print(action_allocation_percentages)
-        # else:
-        #     print(current_state, reward)
-        #     return
+        trader.train(done)
 
         current_state = new_state
-        #print(action_allocation_percentages, env.cash)
         step += 1
  
     if not episode % 2:
-            print(f"Episode: {episode} Total Reward: {env.total_portfolio} Epsilon: {epsilon:.2f}")
+            print(f"Episode: {episode} Total Reward: {env.total_profit} Epsilon: {epsilon:.2f}")
     
-    print(portfolio_manager.noise_std)
-    if portfolio_manager.noise_std > portfolio_manager.MIN_NOISE:
-        portfolio_manager.noise_std *= portfolio_manager.NOISE_DECAY
+    print(trader.noise_std)
+    if trader.noise_std > trader.MIN_NOISE:
+        trader.noise_std *= trader.NOISE_DECAY
 
     return episode_reward
 
@@ -285,62 +223,61 @@ def train_episode(env,trading_desk, episode, epsilon):
 # ticker = 'AAPL'
 # train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
 # training_set = pd.concat([train_df, val_df ,rl_df,test_df])
-#training_set
+# print(training_set)
 
-tickers = ['AAPL','GOOGL', 'CCL', 'NVDA']
-trading_desk = {}
-data = pd.DataFrame()
-for ticker in tickers:
-    trader = DQNAgent()
-    trader_path = f'models/{ticker.lower()}_best_agent_vc_dimOPT.pth'
-    load_dqn_agent(trader, trader_path)
-    trading_desk[ticker] = trader
-    #load_dqn_agent(trader, 'sinus_trader.pth')
-    
-    train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
-    training_set = pd.concat([train_df, val_df ,rl_df,test_df])
-
-    temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
-    #print(temp.shape)
-    data = pd.concat([data, temp], axis=1)
-    #print(data)
-    #temp[ticker] = training_set['close']
-    #temp = pd.DataFrame(temp, columns=[ticker])
-    #print(temp)
 
 #print(data)
 reward_all = []
 evaluate_revards = []
-portfolio_manager = AgentPortfolio()
+trader = AgentTrader()
 epsilon = 1
 
+data = np.sin(np.linspace(0, 500, 2500)).astype(np.float32) + 1
+
+# Parameters
+window_size = 10  # number of data points per OHLC bar
+
+data = np.sin(np.linspace(0, 500, 50000)).astype(np.float32) + 1
+
+# Parametr: ziarnistość OHLC (co ile punktów tworzymy nowy słupek)
+grain = 10
+
+# Upewniamy się, że liczba danych jest wielokrotnością grain
+data = data[:len(data) // grain * grain]
+
+# Grupujemy dane po 'grain' elementów
+data_reshaped = data.reshape(-1, grain)
+
+# Tworzymy OHLC DataFrame
+ohlc = pd.DataFrame({
+    'open': data_reshaped[:, 0],
+    'high': data_reshaped.max(axis=1),
+    'low': data_reshaped.min(axis=1),
+    'close': data_reshaped[:, -1],
+})
 
 
-# data = np.sin(np.linspace(0, 500, 2500)).astype(np.float32) + 1
-# data = pd.DataFrame(data, columns=["close"])
+data = ohlc
 
 data_split = int(len(data)  * 0.8)
 
 train_data = data[:data_split]
 valid_data = data[data_split:]
 
-WINDOW_SIZE = 96
-env = PortfolioEnv(train_data, window_size=WINDOW_SIZE)
-valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE)
+env = TimeSeriesEnvOHLC(train_data,96)
+valid_env = TimeSeriesEnvOHLC(train_data, 96)
 
-print('initilized')
-#super dla 200, batch64
+
+WINDOW_SIZE = 96
+
 EPISODES = 50
 MIN_EPSILON = 0.001
-
-#state = np.random.get_state()
-#print(state)
 
 max_portfolio_manager = None
 max_reward = 0
 evaluate_every = 1
 for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
-    reward = train_episode(env,trading_desk, episode,epsilon)
+    reward = train_episode(env, episode,epsilon)
     
     
     # if epsilon > MIN_EPSILON:
@@ -359,15 +296,15 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     
     print("Renderuje środowisko walidacyjne")
     valid_env.reset()
-    reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env,trading_desk, portfolio_manager)
+    total_reward = evaluate_steps(valid_env, trader,OHCL=True)
 
     #render_env(valid_env)
-    render_portfolio_summary(valid_env)
+    render_env(valid_env, OHCL=True)
     
     #print(env.portfolio_value_history)
-    print()
-    print(info)
-    evaluate_revards.append(info)
+    print(total_reward)
+    #print(info)
+    evaluate_revards.append(total_reward)
     
     # if reward_valid_dataset > max_reward and episode > 1:
     #     max_reward = reward_valid_dataset

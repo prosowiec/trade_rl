@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import torch
 
-def evaluate_steps(env, model, device="cuda:0"):
+def evaluate_steps(env, model, device="cuda:0", OHCL = False):
     state = env.reset()
     total_reward = 0
     done = False
@@ -9,11 +9,14 @@ def evaluate_steps(env, model, device="cuda:0"):
     action = 0
     while not done:
         # konwersja stanu na tensora
-        state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+        state_tensor = torch.tensor(state, dtype=torch.float32, device=device)#.unsqueeze(0)
 
         with torch.no_grad():
-            q_values = model(state_tensor)
-            action = torch.argmax(q_values).item()
+            if OHCL:
+                action = model.get_action_target(state_tensor)
+            else:
+                q_values = model(state_tensor)
+                action = torch.argmax(q_values).item()
 
         state, reward, done = env.step(action)
         total_reward += reward
@@ -24,8 +27,12 @@ def evaluate_steps(env, model, device="cuda:0"):
     return total_reward
 
 
-def render_env(env, title_suffix=""):
-    prices = env.data
+def render_env(env, title_suffix="", OHCL = False):
+    if OHCL:
+        prices = env.ohlc_data[:,3]
+    else:
+        prices = env.data
+        
     buy_points = env.states_buy
     sell_points = env.states_sell
     profit = env.total_profit #+ np.sum(test_env.data[-1] - test_env.inventory) 
