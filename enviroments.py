@@ -374,6 +374,7 @@ class TimeSeriesEnvOHLC(gym.Env):
 
         self.inventory = []
         self.total_profit = 0.0
+        self.prev_profit = 0.0
         self.states_buy = []
         self.states_sell = []
         self.allocations = []
@@ -385,6 +386,7 @@ class TimeSeriesEnvOHLC(gym.Env):
         self.current_step = self.window_size
         self.inventory = []
         self.total_profit = 0.0
+        self.prev_profit = 0.0
         self.states_buy = []
         self.states_sell = []
         self.allocations = []
@@ -399,39 +401,83 @@ class TimeSeriesEnvOHLC(gym.Env):
         norm_window = (window - min_val) / (max_val - min_val + 1e-8)
         return norm_window.astype(np.float32).T
 
-    def step(self, action):
-        done = False
-        reward = -0.1
-        price = self.ohlc_data[self.current_step][3]  # używamy 'close'
-        self.last_price = self.ohlc_data[self.current_step - 1][3]  
-        action = action[0]
+    # def step(self, action):
+    #     done = False
+    #     reward = -0.1
+    #     price = self.ohlc_data[self.current_step][3]  # używamy 'close'
+    #     self.last_price = self.ohlc_data[self.current_step - 1][3]  
+    #     action = action[0]
 
-        if action > 0.0:  # Buy
-            self.inventory.append(price)
-            #print(price)
-            self.states_buy.append(self.current_step)
-            reward = 0.0
-            bought_price = self.inventory[0]
-            self.allocations.append(action)
+    #     if action > 0.2:  # Buy
+    #         self.inventory.append(price)
+    #         #print(price)
+    #         self.states_buy.append(self.current_step)
+    #         #reward = price - self.last_price
+    #         bought_price = self.inventory[0]
+    #         self.allocations.append(action)
+    #         reward += .1
 
-        elif action < 0.0 and len(self.inventory) > 0:  # Sell
-            bought_price = self.inventory.pop(0)
-            prev_allocation = self.allocations.pop(0)   
-            profit = price - bought_price
-            self.total_profit += profit
-            #reward = profit
+    #     elif action < -0.2 and len(self.inventory) > 0:  # Sell
+    #         bought_price = self.inventory.pop(0)
+    #         prev_allocation = self.allocations.pop(0)   
+    #         profit = (price - bought_price) / bought_price + 1
+    #         self.total_profit += profit
+    #         #reward = profit
             
-            self.states_sell.append(self.current_step)
-            reward = np.clip(price - bought_price, -1.0, 1.0) * (abs(action) + prev_allocation) / 2
+    #         self.states_sell.append(self.current_step)
+    #         #reward = np.clip(price - bought_price, -1.0, 1.0) #* (abs(action) + prev_allocation) / 2
+    #         #profit = (price - bought_price) #* prev_allocation
+    #         reward = reward * (abs(action) + prev_allocation) / 2
             
         
-        #print(reward, action)
-        self.current_step += 1
+    #     print(reward, action)
+    #     #reward -= 0.01 * len(self.inventory)  
+    #     # if not self.inventory and action < 0.0:
+    #     #     reward = -1
+    #     # prev_price = self.ohlc_data[self.current_step - 1][3]
+    #     # prev_value = sum([prev_price for _ in self.inventory])
+        
+    #     # current_value = sum([price for price in self.inventory])
+    #     #reward = (current_value + self.total_profit) - (prev_value + self.prev_profit)
+        
+    #     self.prev_profit = self.total_profit
+        
+    #     self.current_step += 1
 
+    #     if self.current_step >= len(self.ohlc_data):
+    #         done = True
+    #         if len(self.inventory) > 0:
+    #             self.total_profit += np.sum(self.ohlc_data[-1][3] - np.array(self.inventory, dtype=np.float32))
+
+    #     return self._get_observation(), reward, done
+
+    def step(self, action):
+        action = float(np.clip(action[0], -1, 1))  # zakres [-1, 1]
+
+        done = False
+        current_price = self.ohlc_data[self.current_step][3]
+        
+        if action > 0.2:  # Buy
+            self.inventory.append(current_price)
+            self.states_buy.append(self.current_step)
+            self.allocations.append(abs(action))
+            reward = -0.01  # Small penalty for buying to discourage overtrading
+        elif action < -0.2 and len(self.inventory) > 0:  # Sell
+            bought_price = self.inventory.pop(0)
+            prev_allocation = self.allocations.pop(0)
+            profit = current_price - bought_price
+            reward = profit  # Reward based on realized profit
+            self.total_profit += profit
+            self.states_sell.append(self.current_step)
+        else:  # Hold
+            reward = -0.005 * len(self.inventory)  # Small penalty for holding
+        
+        
+        #reward = profit  # <- kluczowa zmiana
+
+        self.allocations.append(action)
+            
         if self.current_step >= len(self.ohlc_data):
             done = True
-            if len(self.inventory) > 0:
-                self.total_profit += np.sum(self.ohlc_data[-1][3] - np.array(self.inventory, dtype=np.float32))
 
         return self._get_observation(), reward, done
-

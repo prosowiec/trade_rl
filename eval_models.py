@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import torch
+import numpy as np
 
 def evaluate_steps(env, model, device="cuda:0", OHCL = False):
     state = env.reset()
@@ -35,6 +36,8 @@ def render_env(env, title_suffix="", OHCL = False):
         
     buy_points = env.states_buy
     sell_points = env.states_sell
+    buy_points = [i for i in env.states_buy if i < len(prices)]
+    sell_points = [i for i in env.states_sell if i < len(prices)]
     profit = env.total_profit #+ np.sum(test_env.data[-1] - test_env.inventory) 
     
     plt.figure(figsize=(14, 6))
@@ -56,4 +59,67 @@ def render_env(env, title_suffix="", OHCL = False):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    plt.show(block=False)
+    plt.pause(0.5)
+    
+def render_env_ddpg(env, title_suffix="", OHCL=False):
+    if OHCL:
+        prices = env.ohlc_data[:, 3]
+    else:
+        prices = env.data
+
+    profit = env.total_profit
+
+    # Bezpieczne filtrowanie punktów
+    buy_points = [i for i in env.states_buy if i < len(prices)]
+    sell_points = [i for i in env.states_sell if i < len(prices)]
+    paired_points = zip(buy_points[:len(sell_points)], sell_points)
+
+    profits = []
+    for buy_idx, sell_idx in paired_points:
+        buy_price = prices[buy_idx]
+        sell_price = prices[sell_idx]
+        profit = sell_price - buy_price
+        profits.append(profit)
+
+    realized_profit = sum(profits)
+
+    # Dopasowanie alokacji do dostępnych punktów kupna
+    print(f"Alokacje: {env.allocations}")
+    allocations = np.abs(env.allocations[:len(buy_points)])
+    sizes = [150 * a for a in allocations]  # Skalowanie wielkości markerów
+
+    plt.figure(figsize=(14, 6))
+    plt.plot(prices, label='Cena', linewidth=1.5)
+
+    if buy_points:
+        plt.scatter(
+            buy_points,
+            [prices[i] for i in buy_points],
+            color='green',
+            marker='^',
+            label='Kup',
+            s=sizes
+        )
+
+    if sell_points:
+        plt.scatter(
+            sell_points,
+            [prices[i] for i in sell_points],
+            color='red',
+            marker='v',
+            label='Sprzedaj',
+            s=100
+        )
+
+    plt.title(f'Działania agenta {title_suffix} | Łączny zysk: {realized_profit:.2f}')
+    plt.axvline(x=48, color='red', label='Początek okna czasowego')
+    plt.xlabel('Krok')
+    plt.ylabel('Cena')
+
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show(block=False)
+    plt.pause(0.5)
+

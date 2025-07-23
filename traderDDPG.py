@@ -18,59 +18,136 @@ from source.database import read_stock_data
 from copy import deepcopy
 #from enviroments import TimeSeriesEnv_simple
 from gym import spaces
-from eval_models import evaluate_steps, render_env
+from eval_models import evaluate_steps, render_env_ddpg
 from enviroments import TimeSeriesEnvOHLC
 import os
 
 
+# class Actor(nn.Module):
+#     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
+#         super(Actor, self).__init__()
+#         self.conv = nn.Sequential(
+#             nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),  # 97 = liczba cech
+#             nn.ReLU(),
+#             nn.Conv1d(32, 8, kernel_size=1),
+#             nn.ReLU()
+#         )
+#         self.fc = nn.Sequential(
+#             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
+#             nn.Linear(8 * 4, 8),
+#             nn.ReLU(),
+#             nn.Linear(8, 1),        # action_dim = liczba alokacji
+#             nn.Tanh()                # ładne rozkłady alokacji
+#         )
+
+#     def forward(self, state):
+#         #print(state.shape)
+#         x = state.permute(0, 2, 1)  # [B, 4, 97] → [B, 97, 4]
+#         x = self.conv(x)            # [B, 64, 4]
+#         x = self.fc(x)              # [B, 4]
+#         return x
+        
+# class Critic(nn.Module):
+#     def __init__(self, state_dim, action_dim):
+#         super(Critic, self).__init__()
+#         self.conv = nn.Sequential(
+#             nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
+#             nn.ReLU(),
+#             nn.Conv1d(32, 8, kernel_size=1),
+#             nn.ReLU()
+#         )
+#         self.fc = nn.Sequential(
+#             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
+#             nn.Linear(8 * 4 + action_dim, 8),      # dodajemy akcje
+#             nn.ReLU(),
+#             nn.Linear(8, 1)
+#         )
+
+#     def forward(self, state, action):
+#         x = state.permute(0, 2, 1)                   # [B, 97, 4]
+#         x = self.conv(x)                             # [B, 64, 4]
+#         x = x.flatten(start_dim=1)                   # [B, 256]
+#         x = torch.cat([x, action], dim=1)            # [B, 256 + 4]
+#         x = self.fc(x)                               # [B, 1]
+#         return x.flatten()
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),  # 97 = liczba cech
-            nn.ReLU(),
-            nn.Conv1d(32, 8, kernel_size=1),
-            nn.ReLU()
-        )
+        self.lstm = nn.LSTM(input_size=96, hidden_size=32, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(8 * 4, 8),
+            nn.Linear(32, 16),
             nn.ReLU(),
-            nn.Linear(8, 1),        # action_dim = liczba alokacji
-            nn.Tanh()                # ładne rozkłady alokacji
+            nn.Linear(16, action_dim),
+            nn.Tanh()  
         )
 
     def forward(self, state):
-        #print(state.shape)
-        x = state.permute(0, 2, 1)  # [B, 4, 97] → [B, 97, 4]
-        x = self.conv(x)            # [B, 64, 4]
-        x = self.fc(x)              # [B, 4]
-        return x
-        
+        # state: [B, 4, 97] — traktujemy 4 aktywa jako "czas", 96 cech na każde aktywo
+        lstm_out, _ = self.lstm(state)         # lstm_out: [B, 4, 32]
+        x = lstm_out[:, -1, :]                 # weź ostatni timestep: [B, 32]
+        x = self.fc(x)                         # [B, action_dim]
+        return x    
+    
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv1d(32, 8, kernel_size=1),
-            nn.ReLU()
-        )
+        self.lstm = nn.LSTM(input_size=96, hidden_size=32, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Flatten(),                            # [B, 64, 4] → [B, 256]
-            nn.Linear(8 * 4 + action_dim, 8),      # dodajemy akcje
+            nn.Linear(32 + action_dim, 16),
             nn.ReLU(),
-            nn.Linear(8, 1)
+            nn.Linear(16, 1)  # wartość Q
         )
 
     def forward(self, state, action):
-        x = state.permute(0, 2, 1)                   # [B, 97, 4]
-        x = self.conv(x)                             # [B, 64, 4]
-        x = x.flatten(start_dim=1)                   # [B, 256]
-        x = torch.cat([x, action], dim=1)            # [B, 256 + 4]
-        x = self.fc(x)                               # [B, 1]
+        lstm_out, _ = self.lstm(state)        # [B, 4, 8]
+        x = lstm_out[:, -1, :]
+        #print(x.shape, action.shape)
+        x = torch.cat([x, action], dim=1)  # [B, 32 + action_dim]
+        x = self.fc(x)
         return x.flatten()
+# class Actor(nn.Module):
+#     def __init__(self, state_dim, action_dim):  # state_dim = [time_steps, features] = [96, 4]
+#         super(Actor, self).__init__()
+#         # Smaller hidden size for efficiency - now 4 features per timestep
+#         self.lstm = nn.LSTM(input_size=4, hidden_size=16, num_layers=1, batch_first=True)
+#         # Reordered network layers
+#         self.fc = nn.Sequential(
+#             nn.Tanh(),                      # Activation first
+#             nn.Linear(16, 8),               # Then linear layer
+#             nn.ReLU(),                      # Another activation
+#             nn.Linear(8, action_dim),       # Final output layer
+#             nn.Dropout(0.2),                 # Dropout last
+#             nn.Tanh()                      # Final activation for action output
+#         )
 
+#     def forward(self, state):
+#         # state: [B, 96, 4] — treat 96 as "time", 4 features per timestep  
+#         lstm_out, _ = self.lstm(state)         # lstm_out: [B, 96, 16]
+#         x = lstm_out[:, -1, :]                 # take last timestep: [B, 16]
+#         x = self.fc(x)                         # [B, action_dim]
+#         return x    
+
+# class Critic(nn.Module):
+#     def __init__(self, state_dim, action_dim):
+#         super(Critic, self).__init__()
+#         # Smaller hidden size matching Actor - now 4 features per timestep
+#         self.lstm = nn.LSTM(input_size=4, hidden_size=16, num_layers=1, batch_first=True)
+#         # Reordered network layers
+#         self.fc = nn.Sequential(
+#             nn.ReLU(),                         # Activation first
+#             nn.Linear(16 + action_dim, 12),    # Then linear layer
+#             nn.Dropout(0.2),                   # Dropout in middle
+#             nn.Linear(12, 4),                  # Another linear layer
+#             nn.ReLU(),                         # Another activation
+#             nn.Linear(4, 1)                    # Q-value output last
+#         )
+
+#     def forward(self, state, action):
+#         lstm_out, _ = self.lstm(state)        # [B, 96, 16]
+#         x = lstm_out[:, -1, :]                # [B, 16] - take last timestep
+#         x = torch.cat([x, action], dim=1)     # [B, 16 + action_dim]
+#         x = self.fc(x)                        # [B, 1]
+#         return x.flatten()                    # [B]
 
 
 class AgentTrader:
@@ -220,10 +297,10 @@ def train_episode(env, episode, epsilon):
 
 
 
-# ticker = 'AAPL'
-# train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
-# training_set = pd.concat([train_df, val_df ,rl_df,test_df])
-# print(training_set)
+#ticker = 'AAPL'
+#train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
+#training_set = pd.concat([train_df, val_df ,rl_df,test_df])
+#print(training_set[['open', 'high', 'low', 'close']])
 
 
 #print(data)
@@ -234,7 +311,7 @@ epsilon = 1
 
 data = np.sin(np.linspace(0, 500, 2500)).astype(np.float32) + 1
 
-# Parameters
+
 window_size = 10  # number of data points per OHLC bar
 
 data = np.sin(np.linspace(0, 500, 50000)).astype(np.float32) + 1
@@ -256,8 +333,8 @@ ohlc = pd.DataFrame({
     'close': data_reshaped[:, -1],
 })
 
-
 data = ohlc
+# data = training_set[['open', 'high', 'low', 'close']] #.values.astype(np.float32)
 
 data_split = int(len(data)  * 0.8)
 
@@ -265,12 +342,12 @@ train_data = data[:data_split]
 valid_data = data[data_split:]
 
 env = TimeSeriesEnvOHLC(train_data,96)
-valid_env = TimeSeriesEnvOHLC(train_data, 96)
+valid_env = TimeSeriesEnvOHLC(valid_data, 96)
 
 
 WINDOW_SIZE = 96
 
-EPISODES = 50
+EPISODES = 15
 MIN_EPSILON = 0.001
 
 max_portfolio_manager = None
@@ -278,12 +355,6 @@ max_reward = 0
 evaluate_every = 1
 for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     reward = train_episode(env, episode,epsilon)
-    
-    
-    # if epsilon > MIN_EPSILON:
-    #     epsilon *= EPSILON_DECAY
-    #     epsilon = max(MIN_EPSILON, epsilon)
-
     
     #reward_all.append(reward)
     #if episode % evaluate_every:
@@ -299,7 +370,7 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     total_reward = evaluate_steps(valid_env, trader,OHCL=True)
 
     #render_env(valid_env)
-    render_env(valid_env, OHCL=True)
+    render_env_ddpg(valid_env, OHCL=True)
     
     #print(env.portfolio_value_history)
     print(total_reward)
