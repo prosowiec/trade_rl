@@ -326,10 +326,10 @@ def train_episode(env, episode, epsilon):
 
 
 
-# ticker = 'AAPL'
-# train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
-# training_set = pd.concat([train_df, val_df ,rl_df,test_df])
-# print(training_set[['open', 'high', 'low', 'close']])
+ticker = 'AAPL'
+train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
+training_set = pd.concat([train_df, val_df ,rl_df,test_df])
+print(training_set[['open', 'high', 'low', 'close']])
 
 
 #print(data)
@@ -363,7 +363,7 @@ ohlc = pd.DataFrame({
 })
 
 data = ohlc
-#data = training_set[['open', 'high', 'low', 'close']] #.values.astype(np.float32)
+data = training_set[['open', 'high', 'low', 'close']] #.values.astype(np.float32)
 
 data_split = int(len(data)  * 0.8)
 

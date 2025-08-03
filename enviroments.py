@@ -406,7 +406,7 @@ class TimeSeriesEnvOHLC(gym.Env):
         #position_ratio = np.clip(np.log(price / total_position_value),0,1) #if price > 0 else 0.0
         portfolio_value = sum(self.inventory)
 
-        position_ratio = len(self.inventory) / 100#portfolio_value if portfolio_value > 0 else 0.0
+        position_ratio = len(self.inventory) / 100 #portfolio_value if portfolio_value > 0 else 0.0
         position_ratio = min(max(position_ratio, 0.0), 1.0)
         
         
@@ -486,7 +486,7 @@ class TimeSeriesEnvOHLC(gym.Env):
             self.inventory.append(price)
             self.states_buy.append(self.current_step)
             self.allocations.append(action)
-            reward = 0.001 * len(self.inventory)  # reward for buying based on price change
+            reward = 0 #0.0001 * len(self.inventory)  # reward for buying based on price change
 
         # SELL
         elif action < -0 and len(self.inventory) > 0:
@@ -497,17 +497,21 @@ class TimeSeriesEnvOHLC(gym.Env):
             self.states_sell.append(self.current_step)
 
             #reward += profit  # Optional: encourage real profit-taking
-            reward = profit #* confidence
+            reward = profit/bought_price #* confidence
 
         self.prev_profit = self.total_profit
         self.current_step += 1
         
         portfolio_value = sum(self.inventory)
 
-        position_ratio = len(self.inventory) / 1000  #if portfolio_value > 0 else 0.0
+        position_ratio = len(self.inventory) / 100  #if portfolio_value > 0 else 0.0
         position_ratio = min(max(position_ratio, 0.0), 1.0)
-        if position_ratio > 0.9 or position_ratio < 0.001:
+        if position_ratio > 0.9 or position_ratio < 0.01:
             reward -= 0.2
+        
+        if len(self.inventory) >= 100:
+            self.inventory.pop(0)
+            #reward -= 0.2
 
         print(f"Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
 
