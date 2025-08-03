@@ -10,7 +10,7 @@ from tqdm import tqdm
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import copy
 
 from rl_agent_simple import DQNAgent
 from rl_agent import load_dqn_agent
@@ -67,7 +67,32 @@ class Critic(nn.Module):
         x = self.fc(x)  # [B, 1]
         return x.flatten()
     
+class OUNoise:
+    """Ornstein-Uhlenbeck process."""
 
+    def __init__(self, size, mu=0., theta=0.15, sigma=0.2):
+        """Initialize parameters and noise process."""
+        self.mu = mu * np.ones(size)
+        self.theta = theta
+        self.sigma = sigma
+        self.reset()
+
+    def reset(self):
+        """Reset the internal state (= noise) to mean (mu)."""
+        self.state = copy.copy(self.mu)
+
+    def sample(self):
+        """Update internal state and return it as a noise sample."""
+        x = self.state
+        dx = self.theta * (self.mu - x) + self.sigma * np.array([np.random.randn() for i in range(len(x))])
+        self.state = x + dx
+        return self.state
+    
+    def __call__(self, action):
+        """Call to sample noise."""
+        return np.clip(action + self.sample(),-1,1 )
+    
+    
 class AgentTrader:
     def __init__(self, input_dim=96, action_dim=1): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -91,9 +116,10 @@ class AgentTrader:
         self.DISCOUNT = 0.999
         self.TAU = 1e-3  # do soft update
 
-        self.noise_std = 0.3
-        self.NOISE_DECAY = 0.9
-        self.MIN_NOISE = 0.05
+        self.noisy_action = OUNoise(size=action_dim)
+        # self.noise_std = 1
+        # self.NOISE_DECAY = 0.5
+        # self.MIN_NOISE = 0.05
         
     def update_replay_memory(self, transition):
         self.replay_memory.append(transition)
@@ -117,12 +143,7 @@ class AgentTrader:
         
         next_states = torch.from_numpy(np.array(states_only_next, dtype=np.float32)).to(self.device)
         position_ratios_next = torch.from_numpy(np.array(position_ratiosy_next, dtype=np.float32)).to(self.device)
-        
-        #states = torch.tensor(np.array(states), dtype=torch.float32).to(self.device)
-        #next_states = torch.tensor(np.array(next_states), dtype=torch.float32).to(self.device)
-        
-        #actions = np.array([action['portfolio_manager'] for action in actions])
-        #print(actions.shape)
+
         actions = torch.from_numpy(np.array(actions, dtype=np.float32)).to(self.device)
 
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
@@ -170,8 +191,9 @@ class AgentTrader:
         #print(state.shape, position_ratio.shape)
         with torch.no_grad():
             action = self.actor(state, position_ratio).cpu().numpy()
-        noise = np.random.normal(0, self.noise_std, size=action.shape)
-        return np.clip(action + noise, -1, 1).flatten()
+        #noise = np.random.normal(0, self.noise_std, size=action.shape)
+        #print(self.noisy_action(action))
+        return self.noisy_action(action).flatten() #np.clip(action + noise, -1, 1).flatten()
     
     def get_action_target(self, state):
         state, position_ratio = state
@@ -195,6 +217,7 @@ def train_episode(env, episode, epsilon):
 
     
     current_state = env.reset()
+    trader.noisy_action.reset()
     #print(current_state)
     #print(current_state[0].shape, current_state[1])
     done = False
@@ -225,16 +248,16 @@ def train_episode(env, episode, epsilon):
     if not episode % 2:
             print(f"Episode: {episode} Total Reward: {env.total_profit} Epsilon: {epsilon:.2f}")
     
-    print(trader.noise_std)
-    if trader.noise_std > trader.MIN_NOISE:
-        trader.noise_std *= trader.NOISE_DECAY
+    # print(trader.noise_std)
+    # if trader.noise_std > trader.MIN_NOISE:
+    #     trader.noise_std *= trader.NOISE_DECAY
 
     return episode_reward
 
 
 
 
-ticker = 'AAPL'
+ticker = 'CCL'
 train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
 training_set = pd.concat([train_df, val_df ,rl_df,test_df])
 print(training_set[['open', 'high', 'low', 'close']])
@@ -271,7 +294,7 @@ ohlc = pd.DataFrame({
 })
 
 data = ohlc
-data = training_set[['open', 'high', 'low', 'close']] #.values.astype(np.float32)
+#data = training_set[['open', 'high', 'low', 'close']] #.values.astype(np.float32)
 
 data_split = int(len(data)  * 0.8)
 
