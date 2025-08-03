@@ -73,39 +73,49 @@ import os
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
-        self.lstm = nn.LSTM(input_size=96, hidden_size=32, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_size=4, hidden_size=16, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Linear(32, 16),
+            nn.Linear(16 + 1, 16),
             nn.ReLU(),
             nn.Linear(16, action_dim),
             nn.Tanh()  
         )
-
-    def forward(self, state):
-        # state: [B, 4, 97] — traktujemy 4 aktywa jako "czas", 96 cech na każde aktywo
-        lstm_out, _ = self.lstm(state)         # lstm_out: [B, 4, 32]
-        x = lstm_out[:, -1, :]                 # weź ostatni timestep: [B, 32]
-        x = self.fc(x)                         # [B, action_dim]
-        return x    
     
+    def forward(self, state, position_ratio):
+        # state: [B, 4, 97] — now we need to reshape to use 4 as input features
+        # Option 1: Transpose to treat features as sequence steps
+        state_transposed = state.transpose(1, 2)  # [B, 97, 4]
+        lstm_out, _ = self.lstm(state_transposed)  # lstm_out: [B, 97, 32]
+        x = lstm_out[:, -1, :]                     # take last timestep: [B, 32]
+        #print(x.shape, position_ratio.shape)
+        x = torch.cat([x, position_ratio], dim=1)  # [B, 32 + 1]
+        x = self.fc(x)                             # [B, action_dim]
+        return x
+   
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
-        self.lstm = nn.LSTM(input_size=96, hidden_size=32, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_size=4, hidden_size=16, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Linear(32 + action_dim, 16),
+            nn.Linear(16 + action_dim + 1, 16),  # +1 for position_ratio
             nn.ReLU(),
-            nn.Linear(16, 1)  # wartość Q
+            nn.Linear(16, 1)  # Output: Q-value
         )
 
-    def forward(self, state, action):
-        lstm_out, _ = self.lstm(state)        # [B, 4, 8]
-        x = lstm_out[:, -1, :]
-        #print(x.shape, action.shape)
-        x = torch.cat([x, action], dim=1)  # [B, 32 + action_dim]
-        x = self.fc(x)
+    def forward(self, state, position_ratio, action):
+        # state: [B, 4, 97] — treat features as sequence
+        #print(state.shape, action.shape, position_ratio.shape)
+        state_transposed = state.transpose(1, 2)  # [B, 97, 4]
+        lstm_out, _ = self.lstm(state_transposed)  # [B, 97, 16]
+        x = lstm_out[:, -1, :]                     # [B, 16]
+
+        # Add action and position_ratio
+        x = torch.cat([x, action, position_ratio], dim=1)  # [B, 16 + action_dim + 1]
+        x = self.fc(x)  # [B, 1]
         return x.flatten()
-# class Actor(nn.Module):
+    
+        
+    # class Actor(nn.Module):
 #     def __init__(self, state_dim, action_dim):  # state_dim = [time_steps, features] = [96, 4]
 #         super(Actor, self).__init__()
 #         # Smaller hidden size for efficiency - now 4 features per timestep
@@ -187,8 +197,22 @@ class AgentTrader:
         minibatch = random.sample(self.replay_memory, self.MINIBATCH_SIZE)
         states, actions, rewards, next_states, dones = zip(*minibatch)
         #print(actions)
-        states = torch.tensor(np.array(states), dtype=torch.float32).to(self.device)
-        next_states = torch.tensor(np.array(next_states), dtype=torch.float32).to(self.device)
+        states_only = [s[0] for s in states]
+        position_ratios = [s[1] for s in states]
+        
+        states_only_next = [s[0] for s in next_states]
+        position_ratiosy_next = [s[1] for s in next_states]
+
+
+        states = torch.tensor(states_only, dtype=torch.float32).to(self.device)
+        position_ratios = torch.tensor(position_ratios, dtype=torch.float32).to(self.device)
+        
+        next_states = torch.tensor(states_only_next, dtype=torch.float32).to(self.device)
+        position_ratios_next = torch.tensor(position_ratiosy_next, dtype=torch.float32).to(self.device)
+
+        
+        #states = torch.tensor(np.array(states), dtype=torch.float32).to(self.device)
+        #next_states = torch.tensor(np.array(next_states), dtype=torch.float32).to(self.device)
         
         #actions = np.array([action['portfolio_manager'] for action in actions])
         #print(actions.shape)
@@ -198,12 +222,12 @@ class AgentTrader:
         #dones = dones.unsqueeze(1).expand(64, 1)
         # Krytyk - target Q
         with torch.no_grad():
-            next_actions = self.target_actor(next_states)
-            target_q = self.target_critic(next_states, next_actions)
+            next_actions = self.target_actor(next_states, position_ratios_next)
+            target_q = self.target_critic(next_states,position_ratios_next, next_actions)
             #print(target_q.shape, rewards.shape, dones.shape)
             target_q = rewards + (~dones) * self.DISCOUNT * target_q
 
-        current_q = self.critic(states, actions)
+        current_q = self.critic(states,position_ratios,actions)
         #print(current_q.shape, target_q.shape)
         critic_loss = self.loss_fn(current_q, target_q)
 
@@ -212,8 +236,8 @@ class AgentTrader:
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
 
-        predicted_actions = self.actor(states)
-        actor_loss = -self.critic(states, predicted_actions).mean()
+        predicted_actions = self.actor(states,position_ratios)
+        actor_loss = -self.critic(states,position_ratios, predicted_actions).mean()
         
         
 
@@ -232,16 +256,21 @@ class AgentTrader:
             target_param.data.copy_(self.TAU * param.data + (1.0 - self.TAU) * target_param.data)
 
     def get_action(self, state, noise_std=0.1):
+        state, position_ratio = state
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
+        position_ratio = torch.tensor([position_ratio], dtype=torch.float32).to(self.device)
+        #print(state.shape, position_ratio.shape)
         with torch.no_grad():
-            action = self.actor(state).cpu().numpy()
+            action = self.actor(state, position_ratio).cpu().numpy()
         noise = np.random.normal(0, self.noise_std, size=action.shape)
         return np.clip(action + noise, -1, 1).flatten()
     
     def get_action_target(self, state):
-        state = state.clone().detach().float().unsqueeze(0).to(self.device)
+        state, position_ratio = state
+        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
+        position_ratio = torch.tensor([position_ratio], dtype=torch.float32).to(self.device)
         with torch.no_grad():
-            action = self.target_actor(state).cpu().numpy()
+            action = self.target_actor(state, position_ratio).cpu().numpy()
 
         return np.clip(action, -1, 1).flatten()
 
@@ -259,7 +288,7 @@ def train_episode(env, episode, epsilon):
     
     current_state = env.reset()
     #print(current_state)
-    #print(current_state.shape)
+    #print(current_state[0].shape, current_state[1])
     done = False
     while not done:
 
@@ -297,10 +326,10 @@ def train_episode(env, episode, epsilon):
 
 
 
-#ticker = 'AAPL'
-#train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
-#training_set = pd.concat([train_df, val_df ,rl_df,test_df])
-#print(training_set[['open', 'high', 'low', 'close']])
+# ticker = 'AAPL'
+# train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
+# training_set = pd.concat([train_df, val_df ,rl_df,test_df])
+# print(training_set[['open', 'high', 'low', 'close']])
 
 
 #print(data)
@@ -316,16 +345,16 @@ window_size = 10  # number of data points per OHLC bar
 
 data = np.sin(np.linspace(0, 500, 50000)).astype(np.float32) + 1
 
-# Parametr: ziarnistość OHLC (co ile punktów tworzymy nowy słupek)
+#Parametr: ziarnistość OHLC (co ile punktów tworzymy nowy słupek)
 grain = 10
 
-# Upewniamy się, że liczba danych jest wielokrotnością grain
+#Upewniamy się, że liczba danych jest wielokrotnością grain
 data = data[:len(data) // grain * grain]
 
-# Grupujemy dane po 'grain' elementów
+#Grupujemy dane po 'grain' elementów
 data_reshaped = data.reshape(-1, grain)
 
-# Tworzymy OHLC DataFrame
+#Tworzymy OHLC DataFrame
 ohlc = pd.DataFrame({
     'open': data_reshaped[:, 0],
     'high': data_reshaped.max(axis=1),
@@ -334,7 +363,7 @@ ohlc = pd.DataFrame({
 })
 
 data = ohlc
-# data = training_set[['open', 'high', 'low', 'close']] #.values.astype(np.float32)
+#data = training_set[['open', 'high', 'low', 'close']] #.values.astype(np.float32)
 
 data_split = int(len(data)  * 0.8)
 

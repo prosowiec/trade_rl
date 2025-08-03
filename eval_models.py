@@ -10,11 +10,15 @@ def evaluate_steps(env, model, device="cuda:0", OHCL = False):
     action = 0
     while not done:
         # konwersja stanu na tensora
-        state_tensor = torch.tensor(state, dtype=torch.float32, device=device)#.unsqueeze(0)
+        #state_tensor = torch.tensor(state, dtype=torch.float32, device=device)#.unsqueeze(0)
+        if not OHCL:
+            state_tensor = torch.tensor(state, dtype=torch.float32, device=device)
+
 
         with torch.no_grad():
             if OHCL:
-                action = model.get_action_target(state_tensor)
+                #state_tensor, position_ratio = state_tensor
+                action = model.get_action_target(state )
             else:
                 q_values = model(state_tensor)
                 action = torch.argmax(q_values).item()

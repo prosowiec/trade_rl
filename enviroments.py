@@ -378,7 +378,7 @@ class TimeSeriesEnvOHLC(gym.Env):
         self.states_buy = []
         self.states_sell = []
         self.allocations = []
-
+        self.allocations_stack = []
         self.min_val = np.min(self.ohlc_data)
         self.max_val = np.max(self.ohlc_data)
 
@@ -390,6 +390,7 @@ class TimeSeriesEnvOHLC(gym.Env):
         self.states_buy = []
         self.states_sell = []
         self.allocations = []
+        self.allocations_stack = []
         self.last_price = self.ohlc_data[self.current_step - 1][3]  
         return self._get_observation()
 
@@ -399,35 +400,46 @@ class TimeSeriesEnvOHLC(gym.Env):
         min_val = np.min(window)
         max_val = np.max(window)
         norm_window = (window - min_val) / (max_val - min_val + 1e-8)
-        return norm_window.astype(np.float32).T
+        price = window[-1][3]
+        
+        #total_position_value = sum(self.inventory) if self.inventory else 0.0
+        #position_ratio = np.clip(np.log(price / total_position_value),0,1) #if price > 0 else 0.0
+        portfolio_value = sum(self.inventory)
+
+        position_ratio = len(self.inventory) / 100#portfolio_value if portfolio_value > 0 else 0.0
+        position_ratio = min(max(position_ratio, 0.0), 1.0)
+        
+        
+        return (norm_window.astype(np.float32).T, [position_ratio])
 
     # def step(self, action):
     #     done = False
-    #     reward = -0.1
+    #     reward = 0.0
     #     price = self.ohlc_data[self.current_step][3]  # używamy 'close'
     #     self.last_price = self.ohlc_data[self.current_step - 1][3]  
     #     action = action[0]
 
     #     if action > 0.2:  # Buy
-    #         self.inventory.append(price)
+    #         self.inventory.append(price * action)
     #         #print(price)
     #         self.states_buy.append(self.current_step)
     #         #reward = price - self.last_price
-    #         bought_price = self.inventory[0]
+    #         bought_price = self.inventory[0] * action
     #         self.allocations.append(action)
-    #         reward += .1
+    #         #reward += .1
 
     #     elif action < -0.2 and len(self.inventory) > 0:  # Sell
     #         bought_price = self.inventory.pop(0)
     #         prev_allocation = self.allocations.pop(0)   
-    #         profit = (price - bought_price) / bought_price + 1
+    #         profit = (price - bought_price) #/ bought_price + 1
     #         self.total_profit += profit
     #         #reward = profit
             
     #         self.states_sell.append(self.current_step)
     #         #reward = np.clip(price - bought_price, -1.0, 1.0) #* (abs(action) + prev_allocation) / 2
-    #         #profit = (price - bought_price) #* prev_allocation
-    #         reward = reward * (abs(action) + prev_allocation) / 2
+    #         profit = (price * abs(action) - bought_price) #* prev_allocation
+    #         reward = profit
+    #         #reward = reward * (abs(action) + prev_allocation) / 2
             
         
     #     print(reward, action)
@@ -450,34 +462,58 @@ class TimeSeriesEnvOHLC(gym.Env):
     #             self.total_profit += np.sum(self.ohlc_data[-1][3] - np.array(self.inventory, dtype=np.float32))
 
     #     return self._get_observation(), reward, done
-
     def step(self, action):
-        action = float(np.clip(action[0], -1, 1))  # zakres [-1, 1]
-
         done = False
-        current_price = self.ohlc_data[self.current_step][3]
-        
-        if action > 0.2:  # Buy
-            self.inventory.append(current_price)
+        price = self.ohlc_data[self.current_step][3]
+        last_price = self.ohlc_data[self.current_step - 1][3]
+        action = action[0]
+
+        # Exposure / position info
+        position = sum(self.inventory)  # total value invested
+        price_diff = price - last_price
+        confidence = (action - 0.5) * 2  # -1 (strong sell) to +1 (strong buy)
+
+        # Base directional reward
+        #reward = -price_diff * confidence
+        reward = 0
+
+        # # Amplify reward/penalty if inventory is held
+        # if position > 0:
+        #     reward *= 1 + (position / price)
+
+        # BUY
+        if action > 0:
+            self.inventory.append(price)
             self.states_buy.append(self.current_step)
-            self.allocations.append(abs(action))
-            reward = -0.01  # Small penalty for buying to discourage overtrading
-        elif action < -0.2 and len(self.inventory) > 0:  # Sell
+            self.allocations.append(action)
+            reward = 0.001 * len(self.inventory)  # reward for buying based on price change
+
+        # SELL
+        elif action < -0 and len(self.inventory) > 0:
             bought_price = self.inventory.pop(0)
-            prev_allocation = self.allocations.pop(0)
-            profit = current_price - bought_price
-            reward = profit  # Reward based on realized profit
+            #prev_allocation = self.allocations.pop(0)
+            profit = price - bought_price
             self.total_profit += profit
             self.states_sell.append(self.current_step)
-        else:  # Hold
-            reward = -0.005 * len(self.inventory)  # Small penalty for holding
-        
-        
-        #reward = profit  # <- kluczowa zmiana
 
-        self.allocations.append(action)
-            
+            #reward += profit  # Optional: encourage real profit-taking
+            reward = profit #* confidence
+
+        self.prev_profit = self.total_profit
+        self.current_step += 1
+        
+        portfolio_value = sum(self.inventory)
+
+        position_ratio = len(self.inventory) / 1000  #if portfolio_value > 0 else 0.0
+        position_ratio = min(max(position_ratio, 0.0), 1.0)
+        if position_ratio > 0.9 or position_ratio < 0.001:
+            reward -= 0.2
+
+        print(f"Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
+
         if self.current_step >= len(self.ohlc_data):
             done = True
+            if len(self.inventory) > 0:
+                self.total_profit += np.sum(self.ohlc_data[-1][3] - np.array(self.inventory, dtype=np.float32))
 
         return self._get_observation(), reward, done
