@@ -513,7 +513,7 @@ class TimeSeriesEnvOHLC(gym.Env):
             self.inventory.pop(0)
             #reward -= 0.2
 
-        print(f"Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
+        #print(f"Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
 
         if self.current_step >= len(self.ohlc_data):
             done = True

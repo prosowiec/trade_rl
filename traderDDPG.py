@@ -23,53 +23,6 @@ from enviroments import TimeSeriesEnvOHLC
 import os
 
 
-# class Actor(nn.Module):
-#     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
-#         super(Actor, self).__init__()
-#         self.conv = nn.Sequential(
-#             nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),  # 97 = liczba cech
-#             nn.ReLU(),
-#             nn.Conv1d(32, 8, kernel_size=1),
-#             nn.ReLU()
-#         )
-#         self.fc = nn.Sequential(
-#             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-#             nn.Linear(8 * 4, 8),
-#             nn.ReLU(),
-#             nn.Linear(8, 1),        # action_dim = liczba alokacji
-#             nn.Tanh()                # ładne rozkłady alokacji
-#         )
-
-#     def forward(self, state):
-#         #print(state.shape)
-#         x = state.permute(0, 2, 1)  # [B, 4, 97] → [B, 97, 4]
-#         x = self.conv(x)            # [B, 64, 4]
-#         x = self.fc(x)              # [B, 4]
-#         return x
-        
-# class Critic(nn.Module):
-#     def __init__(self, state_dim, action_dim):
-#         super(Critic, self).__init__()
-#         self.conv = nn.Sequential(
-#             nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
-#             nn.ReLU(),
-#             nn.Conv1d(32, 8, kernel_size=1),
-#             nn.ReLU()
-#         )
-#         self.fc = nn.Sequential(
-#             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
-#             nn.Linear(8 * 4 + action_dim, 8),      # dodajemy akcje
-#             nn.ReLU(),
-#             nn.Linear(8, 1)
-#         )
-
-#     def forward(self, state, action):
-#         x = state.permute(0, 2, 1)                   # [B, 97, 4]
-#         x = self.conv(x)                             # [B, 64, 4]
-#         x = x.flatten(start_dim=1)                   # [B, 256]
-#         x = torch.cat([x, action], dim=1)            # [B, 256 + 4]
-#         x = self.fc(x)                               # [B, 1]
-#         return x.flatten()
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
@@ -114,51 +67,6 @@ class Critic(nn.Module):
         x = self.fc(x)  # [B, 1]
         return x.flatten()
     
-        
-    # class Actor(nn.Module):
-#     def __init__(self, state_dim, action_dim):  # state_dim = [time_steps, features] = [96, 4]
-#         super(Actor, self).__init__()
-#         # Smaller hidden size for efficiency - now 4 features per timestep
-#         self.lstm = nn.LSTM(input_size=4, hidden_size=16, num_layers=1, batch_first=True)
-#         # Reordered network layers
-#         self.fc = nn.Sequential(
-#             nn.Tanh(),                      # Activation first
-#             nn.Linear(16, 8),               # Then linear layer
-#             nn.ReLU(),                      # Another activation
-#             nn.Linear(8, action_dim),       # Final output layer
-#             nn.Dropout(0.2),                 # Dropout last
-#             nn.Tanh()                      # Final activation for action output
-#         )
-
-#     def forward(self, state):
-#         # state: [B, 96, 4] — treat 96 as "time", 4 features per timestep  
-#         lstm_out, _ = self.lstm(state)         # lstm_out: [B, 96, 16]
-#         x = lstm_out[:, -1, :]                 # take last timestep: [B, 16]
-#         x = self.fc(x)                         # [B, action_dim]
-#         return x    
-
-# class Critic(nn.Module):
-#     def __init__(self, state_dim, action_dim):
-#         super(Critic, self).__init__()
-#         # Smaller hidden size matching Actor - now 4 features per timestep
-#         self.lstm = nn.LSTM(input_size=4, hidden_size=16, num_layers=1, batch_first=True)
-#         # Reordered network layers
-#         self.fc = nn.Sequential(
-#             nn.ReLU(),                         # Activation first
-#             nn.Linear(16 + action_dim, 12),    # Then linear layer
-#             nn.Dropout(0.2),                   # Dropout in middle
-#             nn.Linear(12, 4),                  # Another linear layer
-#             nn.ReLU(),                         # Another activation
-#             nn.Linear(4, 1)                    # Q-value output last
-#         )
-
-#     def forward(self, state, action):
-#         lstm_out, _ = self.lstm(state)        # [B, 96, 16]
-#         x = lstm_out[:, -1, :]                # [B, 16] - take last timestep
-#         x = torch.cat([x, action], dim=1)     # [B, 16 + action_dim]
-#         x = self.fc(x)                        # [B, 1]
-#         return x.flatten()                    # [B]
-
 
 class AgentTrader:
     def __init__(self, input_dim=96, action_dim=1): #27 * 4
@@ -204,19 +112,19 @@ class AgentTrader:
         position_ratiosy_next = [s[1] for s in next_states]
 
 
-        states = torch.tensor(states_only, dtype=torch.float32).to(self.device)
-        position_ratios = torch.tensor(position_ratios, dtype=torch.float32).to(self.device)
+        states = torch.from_numpy(np.array(states_only, dtype=np.float32)).to(self.device)
+        position_ratios = torch.from_numpy(np.array(position_ratios, dtype=np.float32)).to(self.device)
         
-        next_states = torch.tensor(states_only_next, dtype=torch.float32).to(self.device)
-        position_ratios_next = torch.tensor(position_ratiosy_next, dtype=torch.float32).to(self.device)
-
+        next_states = torch.from_numpy(np.array(states_only_next, dtype=np.float32)).to(self.device)
+        position_ratios_next = torch.from_numpy(np.array(position_ratiosy_next, dtype=np.float32)).to(self.device)
         
         #states = torch.tensor(np.array(states), dtype=torch.float32).to(self.device)
         #next_states = torch.tensor(np.array(next_states), dtype=torch.float32).to(self.device)
         
         #actions = np.array([action['portfolio_manager'] for action in actions])
         #print(actions.shape)
-        actions = torch.tensor(actions, dtype=torch.float32).to(self.device)
+        actions = torch.from_numpy(np.array(actions, dtype=np.float32)).to(self.device)
+
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         dones = torch.tensor(dones, dtype=torch.bool).to(self.device)
         #dones = dones.unsqueeze(1).expand(64, 1)
