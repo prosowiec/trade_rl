@@ -2,6 +2,8 @@ import gym
 from gym import spaces
 import numpy as np
 import torch
+import pandas as pd
+import ta  
 
 class TimeSeriesEnv(gym.Env):
     def __init__(self, data,min_val, max_val, window_size=10):
@@ -345,25 +347,30 @@ class TimeSeriesEnv_simple(gym.Env):
 
         return self._get_observation(), reward, done
     
-import gym
-from gym import spaces
-import numpy as np
 
 class TimeSeriesEnvOHLC(gym.Env):
     def __init__(self, data, window_size=10):
         super(TimeSeriesEnvOHLC, self).__init__()
         self.window_size = window_size
-        # self.grain = grain
+
+        self.df = data.copy()  
+        self.df['SMA'] = ta.trend.sma_indicator(self.df['close'], window=14)
+        self.df['EMA'] = ta.trend.ema_indicator(self.df['close'], window=14)
+        self.df['RSI'] = ta.momentum.rsi(self.df['close'], window=14)
+        self.df['MACD'] = ta.trend.macd_diff(self.df['close'])
+        self.df['BB_upper'] = ta.volatility.bollinger_hband(self.df['close'])
+        self.df['BB_lower'] = ta.volatility.bollinger_lband(self.df['close'])
+        median_price = (self.df['high'] + self.df['low']) / 2
+        self.df['MOM'] = median_price.rolling(window=5).mean() - median_price.rolling(window=34).mean()
         
-        # # Przekształcamy dane na OHLC
-        self.ohlc_data = data.values  # ucinamy do pełnych okien
-        # data_reshaped = data.reshape(-1, grain)
-        # self.ohlc_data = np.column_stack([
-        #     data_reshaped[:, 0],                         # open
-        #     np.max(data_reshaped, axis=1),               # high
-        #     np.min(data_reshaped, axis=1),               # low
-        #     data_reshaped[:, -1]                         # close
-        # ])
+        self.df.fillna(0.0, inplace=True)  # brakujące wartości
+
+        # OHLC + 7 wskaźników = 11 wymiarów
+        self.indicator_data = self.df[['open', 'high', 'low', 'close',
+                                       'SMA', 'EMA', 'RSI', 'MACD',
+                                       'BB_upper', 'BB_lower', 'MOM']].values
+
+        self.ohlc_data = self.indicator_data
 
         self.current_step = window_size
 
@@ -397,124 +404,63 @@ class TimeSeriesEnvOHLC(gym.Env):
     def _get_observation(self):
         window = self.ohlc_data[self.current_step - self.window_size:self.current_step]
         # Normalizacja okna
-        min_val = np.min(window)
-        max_val = np.max(window)
+        min_val = np.min(window, axis=0)  # min per column
+        max_val = np.max(window, axis=0)  # max per column
+        
+        #print(f"Min: {min_val}, Max: {max_val}")
         norm_window = (window - min_val) / (max_val - min_val + 1e-8)
-        price = window[-1][3]
+        #price = window[-1][3]
         
         #total_position_value = sum(self.inventory) if self.inventory else 0.0
-        #position_ratio = np.clip(np.log(price / total_position_value),0,1) #if price > 0 else 0.0
-        portfolio_value = sum(self.inventory)
-
         position_ratio = len(self.inventory) / 100 #portfolio_value if portfolio_value > 0 else 0.0
         position_ratio = min(max(position_ratio, 0.0), 1.0)
         
         
         return (norm_window.astype(np.float32).T, [position_ratio])
 
-    # def step(self, action):
-    #     done = False
-    #     reward = 0.0
-    #     price = self.ohlc_data[self.current_step][3]  # używamy 'close'
-    #     self.last_price = self.ohlc_data[self.current_step - 1][3]  
-    #     action = action[0]
-
-    #     if action > 0.2:  # Buy
-    #         self.inventory.append(price * action)
-    #         #print(price)
-    #         self.states_buy.append(self.current_step)
-    #         #reward = price - self.last_price
-    #         bought_price = self.inventory[0] * action
-    #         self.allocations.append(action)
-    #         #reward += .1
-
-    #     elif action < -0.2 and len(self.inventory) > 0:  # Sell
-    #         bought_price = self.inventory.pop(0)
-    #         prev_allocation = self.allocations.pop(0)   
-    #         profit = (price - bought_price) #/ bought_price + 1
-    #         self.total_profit += profit
-    #         #reward = profit
-            
-    #         self.states_sell.append(self.current_step)
-    #         #reward = np.clip(price - bought_price, -1.0, 1.0) #* (abs(action) + prev_allocation) / 2
-    #         profit = (price * abs(action) - bought_price) #* prev_allocation
-    #         reward = profit
-    #         #reward = reward * (abs(action) + prev_allocation) / 2
-            
-        
-    #     print(reward, action)
-    #     #reward -= 0.01 * len(self.inventory)  
-    #     # if not self.inventory and action < 0.0:
-    #     #     reward = -1
-    #     # prev_price = self.ohlc_data[self.current_step - 1][3]
-    #     # prev_value = sum([prev_price for _ in self.inventory])
-        
-    #     # current_value = sum([price for price in self.inventory])
-    #     #reward = (current_value + self.total_profit) - (prev_value + self.prev_profit)
-        
-    #     self.prev_profit = self.total_profit
-        
-    #     self.current_step += 1
-
-    #     if self.current_step >= len(self.ohlc_data):
-    #         done = True
-    #         if len(self.inventory) > 0:
-    #             self.total_profit += np.sum(self.ohlc_data[-1][3] - np.array(self.inventory, dtype=np.float32))
-
-    #     return self._get_observation(), reward, done
     def step(self, action):
         done = False
         price = self.ohlc_data[self.current_step][3]
         last_price = self.ohlc_data[self.current_step - 1][3]
         action = action[0]
 
-        # Exposure / position info
-        position = sum(self.inventory)  # total value invested
-        price_diff = price - last_price
-        confidence = (action - 0.5) * 2  # -1 (strong sell) to +1 (strong buy)
-
-        # Base directional reward
-        #reward = -price_diff * confidence
         reward = 0
 
-        # # Amplify reward/penalty if inventory is held
-        # if position > 0:
-        #     reward *= 1 + (position / price)
-
         # BUY
-        if action > 0:
+        if action > 0 and len(self.inventory) <= 100:
             self.inventory.append(price)
             self.states_buy.append(self.current_step)
-            self.allocations.append(action)
-            reward = 0 #0.0001 * len(self.inventory)  # reward for buying based on price change
+            self.allocations_stack.append(action)
+            reward = 0
 
         # SELL
         elif action < -0 and len(self.inventory) > 0:
             bought_price = self.inventory.pop(0)
-            #prev_allocation = self.allocations.pop(0)
+            bought_alocation = self.allocations_stack.pop(0)
             profit = price - bought_price
             self.total_profit += profit
             self.states_sell.append(self.current_step)
 
-            #reward += profit  # Optional: encourage real profit-taking
-            reward = profit/bought_price #* confidence
+        
+            confidence = (abs(action) + bought_alocation)
+            reward = (profit / bought_price) * confidence * 100 + self.total_profit * 0.001
 
         self.prev_profit = self.total_profit
         self.current_step += 1
         
-        portfolio_value = sum(self.inventory)
-
+        reward = np.clip(reward, -1.0, 1.0)  # Clip reward to [-1, 1]
         position_ratio = len(self.inventory) / 100  #if portfolio_value > 0 else 0.0
         position_ratio = min(max(position_ratio, 0.0), 1.0)
+        
         if position_ratio > 0.9 or position_ratio < 0.01:
             reward -= 0.2
         
-        if len(self.inventory) >= 100:
-            self.inventory.pop(0)
-            #reward -= 0.2
+        
+        if len(self.inventory) > 100:
+            reward = -1
 
-        #print(f"Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
-
+        print(f"Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
+        self.allocations.append(action)
         if self.current_step >= len(self.ohlc_data):
             done = True
             if len(self.inventory) > 0:

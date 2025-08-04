@@ -67,7 +67,7 @@ def render_env(env, title_suffix="", OHCL = False):
     plt.show(block=False)
     plt.pause(0.5)
     
-def render_env_ddpg(env, title_suffix="", OHCL=False):
+def render_env_ddpg(env, title_suffix="", OHCL=False, window_size=96):
     if OHCL:
         prices = env.ohlc_data[:, 3]
     else:
@@ -117,8 +117,8 @@ def render_env_ddpg(env, title_suffix="", OHCL=False):
             s=100
         )
 
-    plt.title(f'Działania agenta {title_suffix} | Łączny zysk: {realized_profit:.2f}')
-    plt.axvline(x=48, color='red', label='Początek okna czasowego')
+    plt.title(f'Działania agenta {title_suffix} | Łączny zysk: {env.total_profit:.2f}')
+    plt.axvline(x=window_size, color='red', label='Początek okna czasowego')
     plt.xlabel('Krok')
     plt.ylabel('Cena')
 

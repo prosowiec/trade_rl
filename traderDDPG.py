@@ -26,11 +26,11 @@ import os
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
-        self.lstm = nn.LSTM(input_size=4, hidden_size=16, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_size=11, hidden_size=5, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Linear(16 + 1, 16),
+            nn.Linear(5 + 1, 4),
             nn.ReLU(),
-            nn.Linear(16, action_dim),
+            nn.Linear(4, action_dim),
             nn.Tanh()  
         )
     
@@ -48,11 +48,11 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
-        self.lstm = nn.LSTM(input_size=4, hidden_size=16, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_size=11, hidden_size=5, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Linear(16 + action_dim + 1, 16),  # +1 for position_ratio
+            nn.Linear(5 + action_dim + 1, 4),  # +1 for position_ratio
             nn.ReLU(),
-            nn.Linear(16, 1)  # Output: Q-value
+            nn.Linear(4, 1)  # Output: Q-value
         )
 
     def forward(self, state, position_ratio, action):
@@ -70,11 +70,13 @@ class Critic(nn.Module):
 class OUNoise:
     """Ornstein-Uhlenbeck process."""
 
-    def __init__(self, size, mu=0., theta=0.15, sigma=0.2):
+    def __init__(self, size, mu=0., theta=0.15, sigma=0.9):
         """Initialize parameters and noise process."""
         self.mu = mu * np.ones(size)
         self.theta = theta
         self.sigma = sigma
+        self.sigma_decay = 0.999995
+        self.min_sigma = 0.1
         self.reset()
 
     def reset(self):
@@ -86,11 +88,14 @@ class OUNoise:
         x = self.state
         dx = self.theta * (self.mu - x) + self.sigma * np.array([np.random.randn() for i in range(len(x))])
         self.state = x + dx
+        if self.sigma > self.min_sigma:
+            self.sigma *= self.sigma_decay
+        #print(f"Current sigma: {self.sigma:.4f}")
         return self.state
     
     def __call__(self, action):
         """Call to sample noise."""
-        return np.clip(action + self.sample(),-1,1 )
+        return np.clip(action + self.sample(),-1,1)
     
     
 class AgentTrader:
@@ -110,10 +115,10 @@ class AgentTrader:
 
         self.loss_fn = nn.MSELoss()
 
-        self.replay_memory = deque(maxlen=50000)
+        self.replay_memory = deque(maxlen=5000000)
         self.MIN_REPLAY_MEMORY_SIZE = 500
         self.MINIBATCH_SIZE = 64
-        self.DISCOUNT = 0.999
+        self.DISCOUNT = 0.9999
         self.TAU = 1e-3  # do soft update
 
         self.noisy_action = OUNoise(size=action_dim)
@@ -209,7 +214,6 @@ class AgentTrader:
 
 
 
-EPSILON_DECAY = 0.95
 
 def train_episode(env, episode, epsilon):
     episode_reward = 0
@@ -218,20 +222,10 @@ def train_episode(env, episode, epsilon):
     
     current_state = env.reset()
     trader.noisy_action.reset()
-    #print(current_state)
-    #print(current_state[0].shape, current_state[1])
     done = False
     while not done:
 
-        # if np.random.rand() < epsilon:
-        #     action_allocation_percentages = torch.rand((1,), dtype=torch.float32)
-        #     action_allocation_percentages = action_allocation_percentages.squeeze(0).cpu().numpy()  # [n_assets]
-        # else:
-        #print(current_state)
         action = trader.get_action(current_state)
-        #print(action)
-        #print(action.shape)
-        #print(current_state)
         new_state, reward, done = env.step(action)
         
 
@@ -239,7 +233,6 @@ def train_episode(env, episode, epsilon):
         
         trader.update_replay_memory((current_state, action, reward, new_state, done))
         
-        #if np.random.random() >= .7:
         trader.train(done)
 
         current_state = new_state
@@ -248,9 +241,6 @@ def train_episode(env, episode, epsilon):
     if not episode % 2:
             print(f"Episode: {episode} Total Reward: {env.total_profit} Epsilon: {epsilon:.2f}")
     
-    # print(trader.noise_std)
-    # if trader.noise_std > trader.MIN_NOISE:
-    #     trader.noise_std *= trader.NOISE_DECAY
 
     return episode_reward
 
@@ -263,11 +253,6 @@ training_set = pd.concat([train_df, val_df ,rl_df,test_df])
 print(training_set[['open', 'high', 'low', 'close']])
 
 
-#print(data)
-reward_all = []
-evaluate_revards = []
-trader = AgentTrader()
-epsilon = 1
 
 data = np.sin(np.linspace(0, 500, 2500)).astype(np.float32) + 1
 
@@ -294,21 +279,26 @@ ohlc = pd.DataFrame({
 })
 
 data = ohlc
-#data = training_set[['open', 'high', 'low', 'close']] #.values.astype(np.float32)
+data = training_set[['open', 'high', 'low', 'close', 'volume']] #.values.astype(np.float32)
 
 data_split = int(len(data)  * 0.8)
 
 train_data = data[:data_split]
 valid_data = data[data_split:]
 
-env = TimeSeriesEnvOHLC(train_data,96)
-valid_env = TimeSeriesEnvOHLC(valid_data, 96)
 
+WINDOW_SIZE = 256
+env = TimeSeriesEnvOHLC(train_data,WINDOW_SIZE)
+valid_env = TimeSeriesEnvOHLC(valid_data, WINDOW_SIZE)
 
-WINDOW_SIZE = 96
+#print(data)
+reward_all = []
+evaluate_revards = []
+trader = AgentTrader(WINDOW_SIZE)
+epsilon = 1
+
 
 EPISODES = 15
-MIN_EPSILON = 0.001
 
 max_portfolio_manager = None
 max_reward = 0
@@ -316,32 +306,12 @@ evaluate_every = 1
 for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     reward = train_episode(env, episode,epsilon)
     
-    #reward_all.append(reward)
-    #if episode % evaluate_every:
-    #render_env(valid_env)
-    #if not episode % 1:
-    
-    # if max_portfolio_manager:
-    #     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env, trader, max_portfolio_manager)
-    # else:
-    
     print("Renderuje środowisko walidacyjne")
     valid_env.reset()
     total_reward = evaluate_steps(valid_env, trader,OHCL=True)
 
-    #render_env(valid_env)
-    render_env_ddpg(valid_env, OHCL=True)
+    render_env_ddpg(valid_env, OHCL=True, window_size=WINDOW_SIZE)
     
-    #print(env.portfolio_value_history)
     print(total_reward)
-    #print(info)
     evaluate_revards.append(total_reward)
     
-    # if reward_valid_dataset > max_reward and episode > 1:
-    #     max_reward = reward_valid_dataset
-    #     #print(max_reward)
-    #     max_portfolio_manager = deepcopy(portfolio_manager)
-    
-    # #nadpisz jeśli się pogorszy
-    # if max_reward > 0 and episode > 1 and reward_valid_dataset / max_reward <= .7:
-    #     agent = deepcopy(max_portfolio_manager)
