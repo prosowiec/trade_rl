@@ -463,7 +463,6 @@ class TimeSeriesEnvOHLC(gym.Env):
         self.allocations.append(action)
         if self.current_step >= len(self.ohlc_data):
             done = True
-            if len(self.inventory) > 0:
-                self.total_profit += np.sum(self.ohlc_data[-1][3] - np.array(self.inventory, dtype=np.float32))
+            self.total_profit += np.sum(self.ohlc_data[-1][3] - np.array(self.inventory, dtype=np.float32))
 
         return self._get_observation(), reward, done
