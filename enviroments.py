@@ -352,8 +352,9 @@ class TimeSeriesEnvOHLC(gym.Env):
     def __init__(self, data, window_size=10):
         super(TimeSeriesEnvOHLC, self).__init__()
         self.window_size = window_size
+        self.df = data.copy()
 
-        self.df = data.copy()  
+        # Wskaźniki techniczne
         self.df['SMA'] = ta.trend.sma_indicator(self.df['close'], window=14)
         self.df['EMA'] = ta.trend.ema_indicator(self.df['close'], window=14)
         self.df['RSI'] = ta.momentum.rsi(self.df['close'], window=14)
@@ -362,107 +363,99 @@ class TimeSeriesEnvOHLC(gym.Env):
         self.df['BB_lower'] = ta.volatility.bollinger_lband(self.df['close'])
         median_price = (self.df['high'] + self.df['low']) / 2
         self.df['MOM'] = median_price.rolling(window=5).mean() - median_price.rolling(window=34).mean()
-        
-        self.df.fillna(0.0, inplace=True)  # brakujące wartości
 
-        # OHLC + 7 wskaźników = 11 wymiarów
-        self.indicator_data = self.df[['open', 'high', 'low', 'close',
-                                       'SMA', 'EMA', 'RSI', 'MACD',
-                                       'BB_upper', 'BB_lower', 'MOM']].values
+        self.df.fillna(0.0, inplace=True)
 
-        self.ohlc_data = self.indicator_data
+        self.ohlc_data = self.df[['open', 'high', 'low', 'close',
+                                  'SMA', 'EMA', 'RSI', 'MACD',
+                                  'BB_upper', 'BB_lower', 'MOM']].values
 
         self.current_step = window_size
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(window_size, self.ohlc_data.shape[1]), dtype=np.float32)
 
-        self.action_space = spaces.Discrete(3)  # 0 = hold, 1 = buy, 2 = sell
-        self.observation_space = spaces.Box(
-            low=0.0, high=1.0, shape=(window_size * 4,), dtype=np.float32
-        )
-
-        self.inventory = []
+        self.initial_cash = 100_000.0
+        self.cash = self.initial_cash
+        self.inventory = 0.0  # liczba akcji
         self.total_profit = 0.0
-        self.prev_profit = 0.0
+        self.allocations = []
+        self.last_portfolio_value = self.initial_cash
         self.states_buy = []
         self.states_sell = []
-        self.allocations = []
-        self.allocations_stack = []
-        self.min_val = np.min(self.ohlc_data)
-        self.max_val = np.max(self.ohlc_data)
 
     def reset(self):
         self.current_step = self.window_size
-        self.inventory = []
+        self.cash = self.initial_cash
+        self.inventory = 0.0
         self.total_profit = 0.0
-        self.prev_profit = 0.0
+        self.allocations = []
+        self.last_portfolio_value = self.initial_cash
         self.states_buy = []
         self.states_sell = []
-        self.allocations = []
-        self.allocations_stack = []
-        self.last_price = self.ohlc_data[self.current_step - 1][3]  
+
         return self._get_observation()
 
     def _get_observation(self):
         window = self.ohlc_data[self.current_step - self.window_size:self.current_step]
-        # Normalizacja okna
-        min_val = np.min(window, axis=0)  # min per column
-        max_val = np.max(window, axis=0)  # max per column
-        
-        #print(f"Min: {min_val}, Max: {max_val}")
+        min_val = np.min(window, axis=0)
+        max_val = np.max(window, axis=0)
         norm_window = (window - min_val) / (max_val - min_val + 1e-8)
-        #price = window[-1][3]
-        
-        #total_position_value = sum(self.inventory) if self.inventory else 0.0
-        position_ratio = len(self.inventory) / 100 #portfolio_value if portfolio_value > 0 else 0.0
-        position_ratio = min(max(position_ratio, 0.0), 1.0)
-        
-        
+
+        price = self.ohlc_data[self.current_step - 1][3]
+        position_value = self.inventory * price
+        portfolio_value = self.cash + position_value
+        position_ratio = position_value / portfolio_value if portfolio_value > 0 else 0.0
+
         return (norm_window.astype(np.float32).T, [position_ratio])
 
     def step(self, action):
         done = False
+        action = float(action[0])
+        confidence = abs(action)
+        allocation = min(confidence, 1.0)
         price = self.ohlc_data[self.current_step][3]
-        last_price = self.ohlc_data[self.current_step - 1][3]
-        action = action[0]
 
-        reward = 0
-
-        # BUY
-        if action > 0 and len(self.inventory) <= 100:
-            self.inventory.append(price)
+        # Buy
+        if action > 0 and self.cash > 0:
+            invest_amount = self.cash * allocation
+            shares = invest_amount / price
+            self.inventory += shares
+            self.cash -= invest_amount
             self.states_buy.append(self.current_step)
-            self.allocations_stack.append(action)
-            reward = 0
 
-        # SELL
-        elif action < -0 and len(self.inventory) > 0:
-            bought_price = self.inventory.pop(0)
-            bought_alocation = self.allocations_stack.pop(0)
-            profit = price - bought_price
-            self.total_profit += profit
+
+        # Sell
+        elif action < 0 and self.inventory > 0:
+            shares_to_sell = self.inventory * allocation
+            revenue = shares_to_sell * price
+            self.inventory -= shares_to_sell
+            self.cash += revenue
             self.states_sell.append(self.current_step)
 
-        
-            confidence = (abs(action) + bought_alocation)
-            reward = (profit / bought_price) * confidence * 100 + self.total_profit * 0.001
 
-        self.prev_profit = self.total_profit
+        # Reward — zwrot portfela + entropia
+        curr_portfolio_value = self.cash + self.inventory * price
+        portfolio_return = (curr_portfolio_value - self.last_portfolio_value) / (self.last_portfolio_value + 1e-8)
+        self.last_portfolio_value = curr_portfolio_value
+
+        entropy_coeff = 0.01
+        entropy = -(
+            allocation * np.log(allocation + 1e-8) +
+            (1 - allocation) * np.log(1 - allocation + 1e-8)
+        )
+        reward = portfolio_return * 100 #+ entropy_coeff * entropy
+        reward = np.clip(reward, -1.0, 1.0)
+
         self.current_step += 1
-        
-        reward = np.clip(reward, -1.0, 1.0)  # Clip reward to [-1, 1]
-        position_ratio = len(self.inventory) / 100  #if portfolio_value > 0 else 0.0
-        position_ratio = min(max(position_ratio, 0.0), 1.0)
-        
-        if position_ratio > 0.9 or position_ratio < 0.01:
-            reward -= 0.2
-        
-        
-        if len(self.inventory) > 100:
-            reward = -1
-
-        print(f"Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
         self.allocations.append(action)
+
         if self.current_step >= len(self.ohlc_data):
             done = True
-            self.total_profit += np.sum(self.ohlc_data[-1][3] - np.array(self.inventory, dtype=np.float32))
+            final_price = self.ohlc_data[self.current_step - 1][3]
+            self.cash += self.inventory * final_price
+            self.inventory = 0.0
+            self.total_profit = self.cash - self.initial_cash
+
+        print(f"Step: {self.current_step} | Action: {action:.2f} | Reward: {reward:.4f} | Cash: {self.cash:.2f} | Inv: {self.inventory:.2f} | Value: {curr_portfolio_value:.2f}")
 
         return self._get_observation(), reward, done

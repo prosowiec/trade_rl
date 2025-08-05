@@ -18,7 +18,7 @@ def evaluate_steps(env, model, device="cuda:0", OHCL = False):
         with torch.no_grad():
             if OHCL:
                 #state_tensor, position_ratio = state_tensor
-                state = (state[0], np.full_like(state[1], 0.5))
+                #state = (state[0], np.full_like(state[1], 0.5))
                 action = model.get_action_target(state )
             else:
                 q_values = model(state_tensor)

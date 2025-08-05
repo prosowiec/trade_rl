@@ -247,7 +247,7 @@ def train_episode(env, episode, epsilon):
 
 
 
-ticker = 'CCL'
+ticker = 'NVDA'
 train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
 training_set = pd.concat([train_df, val_df ,rl_df,test_df])
 print(training_set[['open', 'high', 'low', 'close']])
