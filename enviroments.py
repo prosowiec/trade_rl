@@ -405,8 +405,8 @@ class TimeSeriesEnvOHLC(gym.Env):
         position_value = self.inventory * price
         portfolio_value = self.cash + position_value
         position_ratio = position_value / portfolio_value if portfolio_value > 0 else 0.0
-
-        return (norm_window.astype(np.float32).T, [position_ratio])
+        last_action = self.allocations[-1] if self.allocations else 0
+        return (norm_window.astype(np.float32).T, [last_action])
 
     def step(self, action):
         done = False
@@ -414,10 +414,18 @@ class TimeSeriesEnvOHLC(gym.Env):
         confidence = abs(action)
         allocation = min(confidence, 1.0)
         price = self.ohlc_data[self.current_step][3]
-
+        last_allocation = self.allocations[-1] if self.allocations else 0.0
+       # action = action - self.allocations[-1] if self.allocations else 0  # Adjust action based on last allocation
+        
+        BUY_SELL = action - last_allocation
         # Buy
-        if action > 0 and self.cash > 0:
+        #print(action)
+        if  action > 0:
+            #to_buy = action - last_allocation
             invest_amount = self.cash * allocation
+            
+            #invest_amount = self.cash * to_buy
+            invest_amount = min(invest_amount, self.cash)
             shares = invest_amount / price
             self.inventory += shares
             self.cash -= invest_amount
@@ -425,8 +433,11 @@ class TimeSeriesEnvOHLC(gym.Env):
 
 
         # Sell
-        elif action < 0 and self.inventory > 0:
+        elif  action < 0  and self.inventory > 0:
             shares_to_sell = self.inventory * allocation
+            #to_sell = last_allocation - action
+            #shares_to_sell = self.inventory * abs(to_sell)
+            shares_to_sell = min(self.inventory, shares_to_sell)
             revenue = shares_to_sell * price
             self.inventory -= shares_to_sell
             self.cash += revenue
@@ -435,7 +446,7 @@ class TimeSeriesEnvOHLC(gym.Env):
 
         # Reward — zwrot portfela + entropia
         curr_portfolio_value = self.cash + self.inventory * price
-        portfolio_return = (curr_portfolio_value - self.last_portfolio_value) / (self.last_portfolio_value + 1e-8)
+        portfolio_return = (curr_portfolio_value - self.last_portfolio_value) / (self.last_portfolio_value + 1e-8)# * allocation
         self.last_portfolio_value = curr_portfolio_value
 
         entropy_coeff = 0.01
@@ -456,6 +467,6 @@ class TimeSeriesEnvOHLC(gym.Env):
             self.inventory = 0.0
             self.total_profit = self.cash - self.initial_cash
 
-        print(f"Step: {self.current_step} | Action: {action:.2f} | Reward: {reward:.4f} | Cash: {self.cash:.2f} | Inv: {self.inventory:.2f} | Value: {curr_portfolio_value:.2f}")
+        print(f"Step: {self.current_step} | Action: {action:3.2f} | Reward: {reward:4.4f} | Cash: {self.cash:6.2f} | Inv: {self.inventory:6.2f} | Value: {curr_portfolio_value:6.2f}")
 
         return self._get_observation(), reward, done

@@ -18,7 +18,7 @@ def evaluate_steps(env, model, device="cuda:0", OHCL = False):
         with torch.no_grad():
             if OHCL:
                 #state_tensor, position_ratio = state_tensor
-                #state = (state[0], np.full_like(state[1], 0.5))
+                #state = (state[0], np.full_like(state[1], 0.0))
                 action = model.get_action_target(state )
             else:
                 q_values = model(state_tensor)
@@ -117,7 +117,8 @@ def render_env_ddpg(env, title_suffix="", OHCL=False, window_size=96):
             s=100
         )
 
-    plt.title(f'Działania agenta {title_suffix} | Łączny zysk: {env.total_profit:.2f}')
+    prcent_profit = (env.total_profit / env.initial_cash) * 100 if env.initial_cash > 0 else 0
+    plt.title(f'Działania agenta {title_suffix} | Łączny zysk: {env.total_profit:.2f} | Zrealizowany zysk: {prcent_profit:.2f} %')
     plt.axvline(x=window_size, color='red', label='Początek okna czasowego')
     plt.xlabel('Krok')
     plt.ylabel('Cena')

@@ -22,6 +22,8 @@ from eval_models import evaluate_steps, render_env_ddpg
 from enviroments import TimeSeriesEnvOHLC
 import os
 
+LOWER_ALOCATION = -1
+
 
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
@@ -70,7 +72,7 @@ class Critic(nn.Module):
 class OUNoise:
     """Ornstein-Uhlenbeck process."""
 
-    def __init__(self, size, mu=0., theta=0.15, sigma=0.9):
+    def __init__(self, size, mu=0., theta=0.15, sigma=0.5):
         """Initialize parameters and noise process."""
         self.mu = mu * np.ones(size)
         self.theta = theta
@@ -95,7 +97,7 @@ class OUNoise:
     
     def __call__(self, action):
         """Call to sample noise."""
-        return np.clip(action + self.sample(),-1,1)
+        return np.clip(action + self.sample(),LOWER_ALOCATION,1)
     
     
 class AgentTrader:
@@ -198,7 +200,7 @@ class AgentTrader:
             action = self.actor(state, position_ratio).cpu().numpy()
         #noise = np.random.normal(0, self.noise_std, size=action.shape)
         #print(self.noisy_action(action))
-        return self.noisy_action(action).flatten() #np.clip(action + noise, -1, 1).flatten()
+        return np.clip(self.noisy_action(action).flatten(),LOWER_ALOCATION,1) #np.clip(action + noise, -1, 1).flatten()
     
     def get_action_target(self, state):
         state, position_ratio = state
@@ -207,7 +209,7 @@ class AgentTrader:
         with torch.no_grad():
             action = self.target_actor(state, position_ratio).cpu().numpy()
 
-        return np.clip(action, -1, 1).flatten()
+        return np.clip(action, LOWER_ALOCATION, 1).flatten()
 
 
     
@@ -247,7 +249,7 @@ def train_episode(env, episode, epsilon):
 
 
 
-ticker = 'NVDA'
+ticker = 'AAPL'
 train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
 training_set = pd.concat([train_df, val_df ,rl_df,test_df])
 print(training_set[['open', 'high', 'low', 'close']])
