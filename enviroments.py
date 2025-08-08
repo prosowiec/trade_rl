@@ -414,7 +414,7 @@ class TimeSeriesEnvOHLC(gym.Env):
         #total_position_value = sum(self.inventory) if self.inventory else 0.0
         position_ratio = len(self.inventory) / 100 #portfolio_value if portfolio_value > 0 else 0.0
         position_ratio = min(max(position_ratio, 0.0), 1.0)
-        
+        position_ratio = 0
         
         return (norm_window.astype(np.float32).T, [position_ratio])
 
@@ -424,15 +424,14 @@ class TimeSeriesEnvOHLC(gym.Env):
         last_price = self.ohlc_data[self.current_step - 1][3]
         action = action[0]
 
-        reward = 0
+        reward = -1
 
         # BUY
-        if action > 0 and len(self.inventory) <= 100:
+        if action > 0:
             self.inventory.append(price)
             self.states_buy.append(self.current_step)
             self.allocations_stack.append(action)
             reward = 0
-
         # SELL
         elif action < -0 and len(self.inventory) > 0:
             bought_price = self.inventory.pop(0)
@@ -441,10 +440,12 @@ class TimeSeriesEnvOHLC(gym.Env):
             self.total_profit += profit
             self.states_sell.append(self.current_step)
 
+            
         
-            confidence = (abs(action) + bought_alocation)
-            reward = (profit / bought_price) * confidence * 100 + self.total_profit * 0.001
+            #confidence = (abs(action) + bought_alocation)
+            reward = (profit) #* confidence * 100 + self.total_profit * 0.001
 
+        reward = price - np.mean(self.inventory) if self.inventory else 0.0
         self.prev_profit = self.total_profit
         self.current_step += 1
         
@@ -452,14 +453,14 @@ class TimeSeriesEnvOHLC(gym.Env):
         position_ratio = len(self.inventory) / 100  #if portfolio_value > 0 else 0.0
         position_ratio = min(max(position_ratio, 0.0), 1.0)
         
-        if position_ratio > 0.9 or position_ratio < 0.01:
-            reward -= 0.2
+        # if position_ratio > 0.9 or position_ratio < 0.01:
+        #     reward -= 0.2
         
         
-        if len(self.inventory) > 100:
-            reward = -1
+        # if len(self.inventory) > 100:
+        #     reward = -1
 
-        print(f"Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
+        print(f"Step: {self.current_step:>6.0f} | Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
         self.allocations.append(action)
         if self.current_step >= len(self.ohlc_data):
             done = True
