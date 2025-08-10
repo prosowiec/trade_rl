@@ -21,6 +21,8 @@ from gym import spaces
 from eval_models import evaluate_steps, render_env_ddpg
 from enviroments import TimeSeriesEnvOHLC
 import os
+from torch.distributions import Categorical
+
 
 
 class Actor(nn.Module):
@@ -31,7 +33,7 @@ class Actor(nn.Module):
             nn.Linear(5 + 1, 4),
             nn.ReLU(),
             nn.Linear(4, action_dim),
-            nn.Tanh()  
+            #nn.Tanh()  
         )
     
     def forward(self, state, position_ratio):
@@ -63,7 +65,7 @@ class Critic(nn.Module):
         x = lstm_out[:, -1, :]                     # [B, 16]
 
         # Add action and position_ratio
-        x = torch.cat([x, action, position_ratio], dim=1)  # [B, 16 + action_dim + 1]
+        x = torch.cat([x, action.flatten(), position_ratio], dim=1)  # [B, 16 + action_dim + 1]
         x = self.fc(x)  # [B, 1]
         return x.flatten()
     
@@ -99,7 +101,7 @@ class OUNoise:
     
     
 class AgentTrader:
-    def __init__(self, input_dim=96, action_dim=1): #27 * 4
+    def __init__(self, input_dim=96, action_dim=3): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -195,19 +197,25 @@ class AgentTrader:
         position_ratio = torch.tensor([position_ratio], dtype=torch.float32).to(self.device)
         #print(state.shape, position_ratio.shape)
         with torch.no_grad():
-            action = self.actor(state, position_ratio).cpu().numpy()
+            #action = self.actor(state, position_ratio).cpu().numpy()
+            probs = torch.softmax(self.noisy_action(self.actor(state)).squeeze(), dim=0)
+            dist = Categorical(probs)
+            action = dist.sample().item()  # zamiast .numpy()[0]
+
         #noise = np.random.normal(0, self.noise_std, size=action.shape)
         #print(self.noisy_action(action))
-        return self.noisy_action(action).flatten() #np.clip(action + noise, -1, 1).flatten()
+        return action #self.noisy_action(action).flatten() #np.clip(action + noise, -1, 1).flatten()
     
     def get_action_target(self, state):
         state, position_ratio = state
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         position_ratio = torch.tensor([position_ratio], dtype=torch.float32).to(self.device)
         with torch.no_grad():
-            action = self.target_actor(state, position_ratio).cpu().numpy()
+            #action = self.target_actor(state, position_ratio).cpu().numpy()
+            action = torch.argmax(self.target_actor(state, position_ratio)).item()
 
-        return np.clip(action, -1, 1).flatten()
+
+        return action
 
 
     
