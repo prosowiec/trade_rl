@@ -450,7 +450,7 @@ class TimeSeriesEnvOHLC(gym.Env):
         self.current_step += 1
                 
 
-        print(f"Step: {self.current_step:>6.2f}  |Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Position_ratio: {position_ratio:>6.5f}")
+        print(f"Step: {self.current_step:>6.0f}  |Action: {action:>6.2f}  |  Reward: {reward:>6.2f} ")
         self.allocations.append(action)
         if self.current_step >= len(self.ohlc_data):
             done = True

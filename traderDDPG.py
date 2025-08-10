@@ -28,12 +28,12 @@ from torch.distributions import Categorical
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
-        self.lstm = nn.LSTM(input_size=11, hidden_size=5, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_size=11, hidden_size=1, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Linear(5 + 1, 4),
+            nn.Linear(256 + 1, 4),
             nn.ReLU(),
             nn.Linear(4, action_dim),
-            #nn.Tanh()  
+            nn.Softmax()  
         )
     
     def forward(self, state, position_ratio):
@@ -41,7 +41,10 @@ class Actor(nn.Module):
         # Option 1: Transpose to treat features as sequence steps
         state_transposed = state.transpose(1, 2)  # [B, 97, 4]
         lstm_out, _ = self.lstm(state_transposed)  # lstm_out: [B, 97, 32]
-        x = lstm_out[:, -1, :]                     # take last timestep: [B, 32]
+        #x = lstm_out[:, -1, :]                     # take last timestep: [B, 32]
+        BATCH_SIZE = lstm_out.shape[0]
+        x = lstm_out.contiguous().view(BATCH_SIZE,-1)
+        #print(f"Out Shape : {lstm_out.shape}, X shape: {x.shape}")
         #print(x.shape, position_ratio.shape)
         x = torch.cat([x, position_ratio], dim=1)  # [B, 32 + 1]
         x = self.fc(x)                             # [B, action_dim]
@@ -50,9 +53,9 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
-        self.lstm = nn.LSTM(input_size=11, hidden_size=5, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_size=11, hidden_size=1, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Linear(5 + action_dim + 1, 4),  # +1 for position_ratio
+            nn.Linear(256 +3+1 , 4),  # +1 for position_ratio
             nn.ReLU(),
             nn.Linear(4, 1)  # Output: Q-value
         )
@@ -62,10 +65,14 @@ class Critic(nn.Module):
         #print(state.shape, action.shape, position_ratio.shape)
         state_transposed = state.transpose(1, 2)  # [B, 97, 4]
         lstm_out, _ = self.lstm(state_transposed)  # [B, 97, 16]
-        x = lstm_out[:, -1, :]                     # [B, 16]
-
+        #x = lstm_out[:, -1, :]                     # [B, 16]
+        
+        BATCH_SIZE = lstm_out.shape[0]
+        x = lstm_out.contiguous().view(BATCH_SIZE,-1)
         # Add action and position_ratio
-        x = torch.cat([x, action.flatten(), position_ratio], dim=1)  # [B, 16 + action_dim + 1]
+        print(x.shape, action.shape, position_ratio.shape )
+        #print(action)
+        x = torch.cat([x, action, position_ratio], dim=1)  # [B, 16 + action_dim + 1]
         x = self.fc(x)  # [B, 1]
         return x.flatten()
     
@@ -97,7 +104,7 @@ class OUNoise:
     
     def __call__(self, action):
         """Call to sample noise."""
-        return np.clip(action + self.sample(),-1,1)
+        return np.clip(action.cpu() + self.sample(),0,2)
     
     
 class AgentTrader:
@@ -152,7 +159,6 @@ class AgentTrader:
         position_ratios_next = torch.from_numpy(np.array(position_ratiosy_next, dtype=np.float32)).to(self.device)
 
         actions = torch.from_numpy(np.array(actions, dtype=np.float32)).to(self.device)
-
         rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         dones = torch.tensor(dones, dtype=torch.bool).to(self.device)
         #dones = dones.unsqueeze(1).expand(64, 1)
@@ -162,7 +168,7 @@ class AgentTrader:
             target_q = self.target_critic(next_states,position_ratios_next, next_actions)
             #print(target_q.shape, rewards.shape, dones.shape)
             target_q = rewards + (~dones) * self.DISCOUNT * target_q
-
+        print(actions,actions.shape )
         current_q = self.critic(states,position_ratios,actions)
         #print(current_q.shape, target_q.shape)
         critic_loss = self.loss_fn(current_q, target_q)
@@ -191,20 +197,18 @@ class AgentTrader:
         for target_param, param in zip(target_net.parameters(), net.parameters()):
             target_param.data.copy_(self.TAU * param.data + (1.0 - self.TAU) * target_param.data)
 
-    def get_action(self, state, noise_std=0.1):
+    def get_action(self, state):
         state, position_ratio = state
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         position_ratio = torch.tensor([position_ratio], dtype=torch.float32).to(self.device)
         #print(state.shape, position_ratio.shape)
         with torch.no_grad():
             #action = self.actor(state, position_ratio).cpu().numpy()
-            probs = torch.softmax(self.noisy_action(self.actor(state)).squeeze(), dim=0)
+            probs = torch.softmax(self.noisy_action(self.actor(state, position_ratio)).squeeze(), dim=0)
             dist = Categorical(probs)
             action = dist.sample().item()  # zamiast .numpy()[0]
-
-        #noise = np.random.normal(0, self.noise_std, size=action.shape)
-        #print(self.noisy_action(action))
-        return action #self.noisy_action(action).flatten() #np.clip(action + noise, -1, 1).flatten()
+        #print(f"Action: {action}")
+        return [action]
     
     def get_action_target(self, state):
         state, position_ratio = state
@@ -213,9 +217,8 @@ class AgentTrader:
         with torch.no_grad():
             #action = self.target_actor(state, position_ratio).cpu().numpy()
             action = torch.argmax(self.target_actor(state, position_ratio)).item()
-
-
-        return action
+        print(f"Action: {action}")
+        return [action]
 
 
     
