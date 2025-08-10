@@ -28,12 +28,12 @@ LOWER_ALOCATION = 0
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
-        self.lstm = nn.LSTM(input_size=11, hidden_size=5, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_size=11, hidden_size=1, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Linear(5 + 1, 4),
+            nn.Linear(256 + 1, 4),
             nn.ReLU(),
             nn.Linear(4, action_dim),
-            nn.Tanh()  
+            nn.Softmax()  
         )
     
     def forward(self, state, position_ratio):
@@ -41,7 +41,10 @@ class Actor(nn.Module):
         # Option 1: Transpose to treat features as sequence steps
         state_transposed = state.transpose(1, 2)  # [B, 97, 4]
         lstm_out, _ = self.lstm(state_transposed)  # lstm_out: [B, 97, 32]
-        x = lstm_out[:, -1, :]                     # take last timestep: [B, 32]
+        #x = lstm_out[:, -1, :]                     # take last timestep: [B, 32]
+        BATCH_SIZE = lstm_out.shape[0]
+        x = lstm_out.contiguous().view(BATCH_SIZE,-1)
+        #print(f"Out Shape : {lstm_out.shape}, X shape: {x.shape}")
         #print(x.shape, position_ratio.shape)
         x = torch.cat([x, position_ratio], dim=1)  # [B, 32 + 1]
         x = self.fc(x)                             # [B, action_dim]
@@ -50,9 +53,9 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
-        self.lstm = nn.LSTM(input_size=11, hidden_size=5, num_layers=1, batch_first=True)
+        self.lstm = nn.LSTM(input_size=11, hidden_size=1, num_layers=1, batch_first=True)
         self.fc = nn.Sequential(
-            nn.Linear(5 + action_dim + 1, 4),  # +1 for position_ratio
+            nn.Linear(256 + action_dim + 1, 4),  # +1 for position_ratio
             nn.ReLU(),
             nn.Linear(4, 1)  # Output: Q-value
         )
@@ -62,8 +65,10 @@ class Critic(nn.Module):
         #print(state.shape, action.shape, position_ratio.shape)
         state_transposed = state.transpose(1, 2)  # [B, 97, 4]
         lstm_out, _ = self.lstm(state_transposed)  # [B, 97, 16]
-        x = lstm_out[:, -1, :]                     # [B, 16]
-
+        #x = lstm_out[:, -1, :]                     # [B, 16]
+        
+        BATCH_SIZE = lstm_out.shape[0]
+        x = lstm_out.contiguous().view(BATCH_SIZE,-1)
         # Add action and position_ratio
         x = torch.cat([x, action, position_ratio], dim=1)  # [B, 16 + action_dim + 1]
         x = self.fc(x)  # [B, 1]
@@ -280,8 +285,8 @@ ohlc = pd.DataFrame({
     'close': data_reshaped[:, -1],
 })
 
-data = ohlc
-#data = training_set[['open', 'high', 'low', 'close', 'volume']] #.values.astype(np.float32)
+#data = ohlc
+data = training_set[['open', 'high', 'low', 'close', 'volume']] #.values.astype(np.float32)
 
 data_split = int(len(data)  * 0.8)
 

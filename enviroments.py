@@ -420,9 +420,9 @@ class TimeSeriesEnvOHLC(gym.Env):
         BUY_SELL = action - last_allocation
         # Buy
         #print(action)
-        if  BUY_SELL > 0:
+        if  action > 0:
             #to_buy = action - last_allocation
-            invest_amount = self.cash * BUY_SELL
+            invest_amount = self.cash * BUY_SELL #* allocation
             
             #invest_amount = self.cash * to_buy
             invest_amount = min(invest_amount, self.cash)
@@ -446,7 +446,7 @@ class TimeSeriesEnvOHLC(gym.Env):
 
         # Reward — zwrot portfela + entropia
         curr_portfolio_value = self.cash + self.inventory * price
-        portfolio_return = (curr_portfolio_value - self.last_portfolio_value) * allocation#/ (self.last_portfolio_value + 1e-8)# * allocation
+        portfolio_return = (curr_portfolio_value - self.last_portfolio_value) / (self.last_portfolio_value + 1e-8) #* allocation
         self.last_portfolio_value = curr_portfolio_value
 
         entropy_coeff = 0.01
@@ -454,7 +454,7 @@ class TimeSeriesEnvOHLC(gym.Env):
             allocation * np.log(allocation + 1e-8) +
             (1 - allocation) * np.log(1 - allocation + 1e-8)
         )
-        reward = portfolio_return * 100 #+ entropy_coeff * entropy
+        reward = portfolio_return #* 100 #+ entropy_coeff * entropy
         reward = np.clip(reward, -1.0, 1.0)
 
         self.current_step += 1
