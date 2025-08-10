@@ -420,9 +420,9 @@ class TimeSeriesEnvOHLC(gym.Env):
         BUY_SELL = action - last_allocation
         # Buy
         #print(action)
-        if  action > 0:
+        if  BUY_SELL > 0:
             #to_buy = action - last_allocation
-            invest_amount = self.cash * allocation
+            invest_amount = self.cash * BUY_SELL
             
             #invest_amount = self.cash * to_buy
             invest_amount = min(invest_amount, self.cash)
@@ -433,8 +433,8 @@ class TimeSeriesEnvOHLC(gym.Env):
 
 
         # Sell
-        elif  action < 0  and self.inventory > 0:
-            shares_to_sell = self.inventory * allocation
+        elif  BUY_SELL < 0  and self.inventory > 0:
+            shares_to_sell = self.inventory * abs(BUY_SELL)
             #to_sell = last_allocation - action
             #shares_to_sell = self.inventory * abs(to_sell)
             shares_to_sell = min(self.inventory, shares_to_sell)
@@ -446,7 +446,7 @@ class TimeSeriesEnvOHLC(gym.Env):
 
         # Reward — zwrot portfela + entropia
         curr_portfolio_value = self.cash + self.inventory * price
-        portfolio_return = (curr_portfolio_value - self.last_portfolio_value) / (self.last_portfolio_value + 1e-8)# * allocation
+        portfolio_return = (curr_portfolio_value - self.last_portfolio_value) * allocation#/ (self.last_portfolio_value + 1e-8)# * allocation
         self.last_portfolio_value = curr_portfolio_value
 
         entropy_coeff = 0.01
@@ -467,6 +467,6 @@ class TimeSeriesEnvOHLC(gym.Env):
             self.inventory = 0.0
             self.total_profit = self.cash - self.initial_cash
 
-        print(f"Step: {self.current_step} | Action: {action:3.2f} | Reward: {reward:4.4f} | Cash: {self.cash:6.2f} | Inv: {self.inventory:6.2f} | Value: {curr_portfolio_value:6.2f}")
+        print(f"Step: {self.current_step:4>.0f} | Action: {action:3>.2f} | Reward: {reward:4>.4f} | Cash: {self.cash:6>.2f} | Inv: {self.inventory:6>.2f} | Value: {curr_portfolio_value:6>.2f}")
 
         return self._get_observation(), reward, done

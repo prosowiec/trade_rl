@@ -22,7 +22,7 @@ from eval_models import evaluate_steps, render_env_ddpg
 from enviroments import TimeSeriesEnvOHLC
 import os
 
-LOWER_ALOCATION = -1
+LOWER_ALOCATION = 0
 
 
 class Actor(nn.Module):
@@ -72,7 +72,7 @@ class Critic(nn.Module):
 class OUNoise:
     """Ornstein-Uhlenbeck process."""
 
-    def __init__(self, size, mu=0., theta=0.15, sigma=0.5):
+    def __init__(self, size, mu=0., theta=0.15, sigma=0.3):
         """Initialize parameters and noise process."""
         self.mu = mu * np.ones(size)
         self.theta = theta
@@ -281,7 +281,7 @@ ohlc = pd.DataFrame({
 })
 
 data = ohlc
-data = training_set[['open', 'high', 'low', 'close', 'volume']] #.values.astype(np.float32)
+#data = training_set[['open', 'high', 'low', 'close', 'volume']] #.values.astype(np.float32)
 
 data_split = int(len(data)  * 0.8)
 
