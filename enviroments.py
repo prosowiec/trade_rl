@@ -423,9 +423,10 @@ class TimeSeriesEnvOHLC(gym.Env):
         done = False
         price = self.ohlc_data[self.current_step][3]
         last_price = self.ohlc_data[self.current_step - 1][3]
-        action = action[0]
+        dis = action
+        action = int(np.argmax(action))
 
-        reward = 0
+        reward = -1
 
         # BUY
         if action == 1 and len(self.inventory) <= 100:
@@ -450,7 +451,7 @@ class TimeSeriesEnvOHLC(gym.Env):
         self.current_step += 1
                 
 
-        print(f"Step: {self.current_step:>6.0f}  |Action: {action:>6.2f}  |  Reward: {reward:>6.2f} ")
+        print(f"Step: {self.current_step:>6.0f}  |  Action: {action:>6.2f}  |  Reward: {reward:>6.2f}  |  Dist: {dis}")
         self.allocations.append(action)
         if self.current_step >= len(self.ohlc_data):
             done = True

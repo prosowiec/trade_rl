@@ -18,12 +18,14 @@ def evaluate_steps(env, model, device="cuda:0", OHCL = False):
         with torch.no_grad():
             if OHCL:
                 #state_tensor, position_ratio = state_tensor
-                state = (state[0], np.full_like(state[1], 0.5))
-                action = model.get_action_target(state )
+                #state = (state[0], np.full_like(state[1], 0.5))
+                action = model.get_action_target(state).detach().cpu().numpy()
+                #action = torch.argmax(action)
             else:
                 q_values = model(state_tensor)
                 action = torch.argmax(q_values).item()
 
+        print(action)
         state, reward, done = env.step(action)
         total_reward += reward
         steps += 1

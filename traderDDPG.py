@@ -69,9 +69,6 @@ class Critic(nn.Module):
         
         BATCH_SIZE = lstm_out.shape[0]
         x = lstm_out.contiguous().view(BATCH_SIZE,-1)
-        # Add action and position_ratio
-        print(x.shape, action.shape, position_ratio.shape )
-        #print(action)
         x = torch.cat([x, action, position_ratio], dim=1)  # [B, 16 + action_dim + 1]
         x = self.fc(x)  # [B, 1]
         return x.flatten()
@@ -79,7 +76,7 @@ class Critic(nn.Module):
 class OUNoise:
     """Ornstein-Uhlenbeck process."""
 
-    def __init__(self, size, mu=0., theta=0.15, sigma=0.9):
+    def __init__(self, size, mu=0., theta=0.15, sigma=0.5):
         """Initialize parameters and noise process."""
         self.mu = mu * np.ones(size)
         self.theta = theta
@@ -104,7 +101,7 @@ class OUNoise:
     
     def __call__(self, action):
         """Call to sample noise."""
-        return np.clip(action.cpu() + self.sample(),0,2)
+        return np.clip(action.cpu() + self.sample(),0,1)
     
     
 class AgentTrader:
@@ -168,7 +165,7 @@ class AgentTrader:
             target_q = self.target_critic(next_states,position_ratios_next, next_actions)
             #print(target_q.shape, rewards.shape, dones.shape)
             target_q = rewards + (~dones) * self.DISCOUNT * target_q
-        print(actions,actions.shape )
+
         current_q = self.critic(states,position_ratios,actions)
         #print(current_q.shape, target_q.shape)
         critic_loss = self.loss_fn(current_q, target_q)
@@ -201,25 +198,26 @@ class AgentTrader:
         state, position_ratio = state
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         position_ratio = torch.tensor([position_ratio], dtype=torch.float32).to(self.device)
-        #print(state.shape, position_ratio.shape)
+
         with torch.no_grad():
-            #action = self.actor(state, position_ratio).cpu().numpy()
-            probs = torch.softmax(self.noisy_action(self.actor(state, position_ratio)).squeeze(), dim=0)
-            dist = Categorical(probs)
-            action = dist.sample().item()  # zamiast .numpy()[0]
-        #print(f"Action: {action}")
-        return [action]
+            probs = self.noisy_action(self.actor(state, position_ratio)).squeeze()
+            #dist = Categorical(probs)
+            #action = dist.sample().item()
+            
+        # Tworzymy one-hot o długości action_dim
+        #action_onehot = np.zeros(self.actor.fc[-2].out_features, dtype=np.float32)  # out_features = action_dim
+        #action_onehot[action_idx] = 1.0
+        return probs  # shape: (action_dim,)
     
     def get_action_target(self, state):
         state, position_ratio = state
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         position_ratio = torch.tensor([position_ratio], dtype=torch.float32).to(self.device)
-        with torch.no_grad():
-            #action = self.target_actor(state, position_ratio).cpu().numpy()
-            action = torch.argmax(self.target_actor(state, position_ratio)).item()
-        print(f"Action: {action}")
-        return [action]
 
+        with torch.no_grad():
+            action_idx = self.target_actor(state, position_ratio).squeeze()
+
+        return action_idx
 
     
 
