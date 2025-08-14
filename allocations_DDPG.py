@@ -12,8 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import copy
 
-from rl_agent_simple import DQNAgent
-from rl_agent import load_dqn_agent
+from trader import DQNAgent
 from source.database import read_stock_data
 from copy import deepcopy
 #from enviroments import TimeSeriesEnv_simple
@@ -257,22 +256,15 @@ data = pd.DataFrame()
 for ticker in tickers:
     trader = DQNAgent()
     trader_path = f'models/{ticker.lower()}_best_agent_vc_dimOPT.pth'
-    load_dqn_agent(trader, trader_path)
+    trader.load_dqn_agent()
     trading_desk[ticker] = trader
-    #load_dqn_agent(trader, 'sinus_trader.pth')
     
     train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
     training_set = pd.concat([train_df, val_df ,rl_df,test_df])
 
     temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
-    #print(temp)
     data = pd.concat([data, temp], axis=1)
-    #print(data)
-    #temp[ticker] = training_set['close']
-    #temp = pd.DataFrame(temp, columns=[ticker])
-    #print(temp)
 
-#print(data)
 reward_all = []
 evaluate_revards = []
 portfolio_manager = AgentPortfolio()
@@ -297,9 +289,6 @@ print('initilized')
 EPISODES = 50
 MIN_EPSILON = 0.001
 
-#state = np.random.get_state()
-#print(state)
-
 max_portfolio_manager = None
 max_reward = 0
 evaluate_every = 1
@@ -307,37 +296,11 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     reward = train_episode(env,trading_desk, episode,epsilon)
     
     
-    # if epsilon > MIN_EPSILON:
-    #     epsilon *= EPSILON_DECAY
-    #     epsilon = max(MIN_EPSILON, epsilon)
-
-    
-    #reward_all.append(reward)
-    #if episode % evaluate_every:
-    #render_env(valid_env)
-    #if not episode % 1:
-    
-    # if max_portfolio_manager:
-    #     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env, trader, max_portfolio_manager)
-    # else:
-    
     print("Renderuje środowisko walidacyjne")
     valid_env.reset()
     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env,trading_desk, portfolio_manager)
 
-    #render_env(valid_env)
     render_portfolio_summary(valid_env)
     
-    #print(env.portfolio_value_history)
-    print()
     print(info)
     evaluate_revards.append(info)
-    
-    # if reward_valid_dataset > max_reward and episode > 1:
-    #     max_reward = reward_valid_dataset
-    #     #print(max_reward)
-    #     max_portfolio_manager = deepcopy(portfolio_manager)
-    
-    # #nadpisz jeśli się pogorszy
-    # if max_reward > 0 and episode > 1 and reward_valid_dataset / max_reward <= .7:
-    #     agent = deepcopy(max_portfolio_manager)
