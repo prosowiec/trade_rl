@@ -12,7 +12,7 @@ def evaluate_steps(env, model, device="cuda:0", OHCL = False):
         # konwersja stanu na tensora
         #state_tensor = torch.tensor(state, dtype=torch.float32, device=device)#.unsqueeze(0)
         if not OHCL:
-            state_tensor = torch.tensor(state, dtype=torch.float32, device=device)
+            state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
 
 
         with torch.no_grad():
@@ -128,3 +128,17 @@ def render_env_ddpg(env, title_suffix="", OHCL=False, window_size=96):
     plt.show(block=False)
     plt.pause(0.5)
 
+def render_training(training_log_df):
+    plt.figure(figsize=(10, 5))
+    
+    plt.plot(training_log_df['trainRewards'], label='Train Reward')
+    plt.plot(training_log_df['evaluateRewards'], label='Validation Reward')
+    plt.plot(training_log_df['testRewards'], label='Test Reward')
+
+    plt.xlabel('Episode')
+    plt.ylabel('Reward')
+    plt.title('Rewards over Episodes')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()

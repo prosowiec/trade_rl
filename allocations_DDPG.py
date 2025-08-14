@@ -10,7 +10,7 @@ from tqdm import tqdm
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import copy
 
 from rl_agent_simple import DQNAgent
 from rl_agent import load_dqn_agent
@@ -21,42 +21,6 @@ from gym import spaces
 from eval_portfolio import evaluate_steps_portfolio, render_env, render_portfolio_summary
 from manager_env import PortfolioEnv
 import os
-
-
-# class Actor(nn.Module):
-#     def __init__(self, state_dim, action_dim):
-#         super(Actor, self).__init__()
-#         self.net = nn.Sequential(
-#             nn.Linear(state_dim, 16), # Using the larger network from previous advice
-#             nn.Sigmoid(),
-#             nn.Linear(16, 16),
-#             nn.Sigmoid(),
-#             nn.Dropout(0.3),
-#             nn.Linear(16, action_dim),
-#             nn.Softmax(dim=1)  # Zakres [-1, 1] dla każdej akcji
-#         )
-
-#     def forward(self, state):
-#         return self.net(state).squeeze(-1)
-
-# class Critic(nn.Module):
-#     def __init__(self, state_dim, action_dim):
-#         super(Critic, self).__init__()
-#         self.net = nn.Sequential(
-#             nn.Linear(state_dim + action_dim, 16),
-#             nn.Sigmoid(),
-#             nn.Linear(16, 16),
-#             nn.Sigmoid(),
-#             nn.Dropout(0.3),
-#             nn.Linear(16, 1),
-#         )
-
-#     def forward(self, state, action):
-#         print(state.shape, action.shape)
-#         #print(state)
-#         #print(action)
-#         x = torch.cat([state, action], dim=1)
-#         return self.net(x)
 
 
 class Actor(nn.Module):
@@ -70,9 +34,9 @@ class Actor(nn.Module):
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(8 * 4, 8),
+            nn.Linear(8 * 5, 8),
             nn.ReLU(),
-            nn.Linear(8, 4),        # action_dim = liczba alokacji
+            nn.Linear(8, 5),        # action_dim = liczba alokacji
             nn.Softmax(dim=-1)                # ładne rozkłady alokacji
         )
 
@@ -94,9 +58,9 @@ class Critic(nn.Module):
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
-            nn.Linear(8 * 4 + action_dim, 8),      # dodajemy akcje
+            nn.Linear(8 * 5 + action_dim, 8),      # dodajemy akcje
             nn.ReLU(),
-            nn.Linear(8, 4)
+            nn.Linear(8, 5)
         )
 
     def forward(self, state, action):
@@ -106,11 +70,40 @@ class Critic(nn.Module):
         x = torch.cat([x, action], dim=1)            # [B, 256 + 4]
         x = self.fc(x)                               # [B, 1]
         return x
+    
+class OUNoise:
+    """Ornstein-Uhlenbeck process."""
 
+    def __init__(self, size, mu=0., theta=0.15, sigma=0.4):
+        """Initialize parameters and noise process."""
+        self.mu = mu * np.ones(size)
+        self.theta = theta
+        self.sigma = sigma
+        self.sigma_decay = 0.999995
+        self.min_sigma = 0.1
+        self.reset()
+
+    def reset(self):
+        """Reset the internal state (= noise) to mean (mu)."""
+        self.state = copy.copy(self.mu)
+
+    def sample(self):
+        """Update internal state and return it as a noise sample."""
+        x = self.state
+        dx = self.theta * (self.mu - x) + self.sigma * np.array([np.random.randn() for i in range(len(x))])
+        self.state = x + dx
+        if self.sigma > self.min_sigma:
+            self.sigma *= self.sigma_decay
+        #print(f"Current sigma: {self.sigma:.4f}")
+        return self.state
+    
+    def __call__(self, action):
+        """Call to sample noise."""
+        return np.clip(action + self.sample(),0,1)
 
 
 class AgentPortfolio:
-    def __init__(self, input_dim=97, action_dim=4): #27 * 4
+    def __init__(self, input_dim=97, action_dim=5): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -132,9 +125,10 @@ class AgentPortfolio:
         self.DISCOUNT = 0.999
         self.TAU = 1e-3  # do soft update
 
-        self.noise_std = 0.3
-        self.NOISE_DECAY = 0.9
-        self.MIN_NOISE = 0.05
+        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.3)
+        # self.noise_std = 0.3
+        # self.NOISE_DECAY = 0.9
+        # self.MIN_NOISE = 0.05
         
     def update_replay_memory(self, transition):
         self.replay_memory.append(transition)
@@ -146,26 +140,23 @@ class AgentPortfolio:
         minibatch = random.sample(self.replay_memory, self.MINIBATCH_SIZE)
         states, actions, rewards, next_states, dones = zip(*minibatch)
         #print(actions)
-        states = torch.tensor(np.array(states), dtype=torch.float32).to(self.device)
-        next_states = torch.tensor(np.array(next_states), dtype=torch.float32).to(self.device)
-        
+        states = torch.from_numpy(np.array(states, dtype=np.float32)).to(self.device)
+        next_states = torch.from_numpy(np.array(next_states, dtype=np.float32)).to(self.device)
+
         actions = np.array([action['portfolio_manager'] for action in actions])
-        #print(actions.shape)
-        actions = torch.tensor(actions, dtype=torch.float32).to(self.device)
-        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        actions = torch.from_numpy(np.array(actions, dtype=np.float32)).to(self.device)
+
+        rewards = torch.from_numpy(np.array(rewards, dtype=np.float32)).to(self.device)
+
         dones = torch.tensor(dones, dtype=torch.bool).to(self.device)
         dones = dones.unsqueeze(1).expand(64, 1)
         # Krytyk - target Q
         with torch.no_grad():
             next_actions = self.target_actor(next_states)
-            #print(next_actions.shape)
-            #print(next_actions)
             target_q = self.target_critic(next_states, next_actions)
-            #print(target_q.shape, rewards.shape, dones.shape)
             target_q = rewards + (~dones) * self.DISCOUNT * target_q
 
         current_q = self.critic(states, actions)
-        #print(current_q.shape, target_q.shape)
         critic_loss = self.loss_fn(current_q, target_q)
 
         self.critic_optimizer.zero_grad()
@@ -196,8 +187,8 @@ class AgentPortfolio:
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         with torch.no_grad():
             action = self.actor(state).cpu().numpy()
-        noise = np.random.normal(0, self.noise_std, size=action.shape)
-        return np.clip(action + noise, 0, 1)
+        # noise = np.random.normal(0, self.noise_std, size=action.shape)
+        return self.noise(action) #np.clip(action + noise, 0, 1)
     
     def get_action_target(self, state):
         state = state.clone().detach().float().unsqueeze(0).to(self.device)
@@ -219,33 +210,19 @@ def train_episode(env,trading_desk, episode, epsilon):
 
     
     current_state = env.reset()
-    #print(current_state)
-    #print(current_state.shape)
     done = False
     while not done:
-
-        # if np.random.rand() < epsilon:
-        #     action_allocation_percentages = torch.rand((1,), dtype=torch.float32)
-        #     action_allocation_percentages = action_allocation_percentages.squeeze(0).cpu().numpy()  # [n_assets]
-        # else:
         
         action_allocation_percentages = portfolio_manager.get_action(current_state)
-        #print(action_allocation_percentages)
-        #action_allocation_percentages = torch.sigmoid(action_allocation_percentages)  # Ensure 0-1 range
-        #action_allocation_percentages = action_allocation_percentages.squeeze(0).cpu().numpy()  # [n_assets]
-        #print(action_allocation_percentages)
         
         traders_actions = []
         hist_data = env.get_price_window()
         for i,key in enumerate(trading_desk.keys()):
             curr_trader = trading_desk[key]
-            #print(hist_data.shape)
-            #print(hist_data)
             traders_actions.append(curr_trader.get_action(hist_data[i,:], target_model = True))
 
-        #print(traders_actions)
+
         action = {
-            #'trader': trader.get_action(env.get_price_window(), target_model = True),
             'trader' : traders_actions,
             'portfolio_manager': np.array([action_allocation_percentages]).flatten()
         }
@@ -255,39 +232,26 @@ def train_episode(env,trading_desk, episode, epsilon):
 
         episode_reward += reward
         
-        #if not np.isnan(action_allocation_percentages):
-        #print(action_allocation_percentages, reward)
         portfolio_manager.update_replay_memory((current_state, action, reward, new_state, done))
         
-        #if np.random.random() >= .7:
         portfolio_manager.train(done)
-        #print(action_allocation_percentages)
-        # else:
-        #     print(current_state, reward)
-        #     return
-
         current_state = new_state
-        #print(action_allocation_percentages, env.cash)
         step += 1
  
     if not episode % 2:
             print(f"Episode: {episode} Total Reward: {env.total_portfolio} Epsilon: {epsilon:.2f}")
     
-    print(portfolio_manager.noise_std)
-    if portfolio_manager.noise_std > portfolio_manager.MIN_NOISE:
-        portfolio_manager.noise_std *= portfolio_manager.NOISE_DECAY
+    # print(portfolio_manager.noise_std)
+    # if portfolio_manager.noise_std > portfolio_manager.MIN_NOISE:
+    #     portfolio_manager.noise_std *= portfolio_manager.NOISE_DECAY
 
     return episode_reward
 
 
 
 
-# ticker = 'AAPL'
-# train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
-# training_set = pd.concat([train_df, val_df ,rl_df,test_df])
-#training_set
 
-tickers = ['AAPL','GOOGL', 'CCL', 'NVDA']
+tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
 trading_desk = {}
 data = pd.DataFrame()
 for ticker in tickers:
@@ -301,7 +265,7 @@ for ticker in tickers:
     training_set = pd.concat([train_df, val_df ,rl_df,test_df])
 
     temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
-    #print(temp.shape)
+    #print(temp)
     data = pd.concat([data, temp], axis=1)
     #print(data)
     #temp[ticker] = training_set['close']

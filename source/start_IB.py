@@ -36,7 +36,7 @@ def open_ib_con():
     login_open = False
     while not login_open:
         login_open = check_if_app_open("Login")
-        time.sleep(5)    
+        time.sleep(1)    
 
     for i in range(10):
         windows = gw.getWindowsWithTitle('Login')

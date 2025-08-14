@@ -331,8 +331,8 @@ class TimeSeriesEnv_simple(gym.Env):
 
         elif action == 2 and len(self.inventory) > 0:  # Sell
             bought_price = self.inventory.pop(0)
-            profit = price - bought_price
-            reward = profit 
+            profit = price - bought_price 
+            reward = np.clip(profit, -1,1)
             self.total_profit += profit
             #reward = self.total_profit
             self.states_sell.append(self.current_step)

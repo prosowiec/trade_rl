@@ -24,3 +24,11 @@ class ModelData(Base):
     accuracy = Column(Float)  # Model accuracy or other metrics
     additional_info = Column(String)  # Any additional information about the model
     
+class TrainingLogs(Base):
+    __tablename__ = "training_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    trainRewards = Column(Float)
+    evaluateRewards = Column(Float)
+    testRewards = Column(Float)
+    ticker = Column(String)
+    episode = Column(Integer)

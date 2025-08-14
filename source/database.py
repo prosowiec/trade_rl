@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine,func
+from sqlalchemy.dialects.sqlite import insert  
 from sqlalchemy.orm import declarative_base, sessionmaker
-from source.db_models import Base, StockData, ModelData  # Dodaj plik models.py poniżej\
+from source.db_models import Base, StockData, ModelData, TrainingLogs  # Dodaj plik models.py poniżej\
 import pandas as pd
 import os
 
@@ -23,18 +24,15 @@ def upload_stock_data(training_set, db = SessionLocal()):
     db.commit()
     
     
-    train_df = training_set[0:int(n*0.4)].copy()
-    val_df = training_set[int(n*0.4):int(n*0.5)].copy()
-    rl_df = training_set[int(n*0.5):int(n*0.9)].copy()
-    test_df = training_set[int(n*0.9):].copy()
+    train_df = training_set[0:int(n * 0.6)].copy()
+    val_df = training_set[int(n * 0.6):int(n * 0.8)].copy()
+    test_df = training_set[int(n * 0.8):].copy()
 
     train_df["train_split"] = "train"
     val_df["train_split"] = "validation"
-    rl_df["train_split"] = "rl"
     test_df["train_split"] = "test"
 
-    # Łączymy wszystko w jeden DataFrame
-    full_df = pd.concat([train_df, val_df, rl_df, test_df])
+    full_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
 
     # Wstawiamy dane do bazy
     for _, row in full_df.iterrows():
@@ -74,7 +72,22 @@ def read_stock_data(ticker: str, db = SessionLocal()):
     # Podziel na 4 zestawy
     train_df = data[data["train_split"] == "train"].reset_index(drop=True)
     val_df = data[data["train_split"] == "validation"].reset_index(drop=True)
-    rl_df = data[data["train_split"] == "rl"].reset_index(drop=True)
     test_df = data[data["train_split"] == "test"].reset_index(drop=True)
 
-    return train_df, val_df, rl_df, test_df
+    return train_df, val_df, test_df
+
+def upsert_training_logs(reward_all, evaluate_rewards, test_rewards,ticker, db=SessionLocal()):
+    training_log_df = pd.DataFrame({'trainRewards' : reward_all,'evaluateRewards' : evaluate_rewards,'testRewards' : test_rewards })
+    training_log_df['ticker'] = ticker
+    training_log_df['episode'] = training_log_df.index
+    
+    db.query(TrainingLogs).filter(TrainingLogs.ticker == ticker).delete()
+    db.commit()
+
+    
+    # dodanie nowych rekordów
+    db.bulk_insert_mappings(TrainingLogs, training_log_df.to_dict(orient='records'))
+    
+    db.commit()    
+    
+    return training_log_df
