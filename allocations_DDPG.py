@@ -33,9 +33,9 @@ class Actor(nn.Module):
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(8 * 5, 8),
+            nn.Linear(8 * action_dim, 8),
             nn.ReLU(),
-            nn.Linear(8, 5),        # action_dim = liczba alokacji
+            nn.Linear(8, action_dim),        # action_dim = liczba alokacji
             nn.Softmax(dim=-1)                # ładne rozkłady alokacji
         )
 
@@ -57,9 +57,9 @@ class Critic(nn.Module):
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
-            nn.Linear(8 * 5 + action_dim, 8),      # dodajemy akcje
+            nn.Linear(8 * action_dim + action_dim, 8),      # dodajemy akcje
             nn.ReLU(),
-            nn.Linear(8, 5)
+            nn.Linear(8, 1)
         )
 
     def forward(self, state, action):
@@ -102,7 +102,7 @@ class OUNoise:
 
 
 class AgentPortfolio:
-    def __init__(self, input_dim=97, action_dim=5): #27 * 4
+    def __init__(self, input_dim=97, action_dim=6): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -148,7 +148,10 @@ class AgentPortfolio:
         rewards = torch.from_numpy(np.array(rewards, dtype=np.float32)).to(self.device)
 
         dones = torch.tensor(dones, dtype=torch.bool).to(self.device)
-        dones = dones.unsqueeze(1).expand(64, 1)
+        #dones = dones.unsqueeze(1).expand(64, 1)
+        #print(f'dones shape: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
+        dones = dones.unsqueeze(1)  
+        rewards = rewards.unsqueeze(1)  # [B, 1]
         # Krytyk - target Q
         with torch.no_grad():
             next_actions = self.target_actor(next_states)
@@ -220,7 +223,6 @@ def train_episode(env,trading_desk, episode, epsilon):
             curr_trader = trading_desk[key]
             traders_actions.append(curr_trader.get_action(hist_data[i,:], target_model = True))
 
-
         action = {
             'trader' : traders_actions,
             'portfolio_manager': np.array([action_allocation_percentages]).flatten()
@@ -254,26 +256,21 @@ tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
 trading_desk = {}
 data = pd.DataFrame()
 for ticker in tickers:
-    trader = DQNAgent()
-    trader_path = f'models/{ticker.lower()}_best_agent_vc_dimOPT.pth'
+    trader = DQNAgent(ticker)
     trader.load_dqn_agent()
-    trading_desk[ticker] = trader
     
-    train_df, val_df ,rl_df,test_df = read_stock_data(ticker)
-    training_set = pd.concat([train_df, val_df ,rl_df,test_df])
+    train_data, valid_data, test_data = read_stock_data(ticker)
+    training_set = pd.concat([train_data, valid_data, test_data])
 
     temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
     data = pd.concat([data, temp], axis=1)
-
+    trading_desk[ticker] = trader
+    
 reward_all = []
 evaluate_revards = []
 portfolio_manager = AgentPortfolio()
 epsilon = 1
 
-
-
-# data = np.sin(np.linspace(0, 500, 2500)).astype(np.float32) + 1
-# data = pd.DataFrame(data, columns=["close"])
 
 data_split = int(len(data)  * 0.8)
 

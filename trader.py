@@ -107,12 +107,21 @@ class DQNAgent:
             self.target_model.load_state_dict(self.model.state_dict())
             self.target_update_counter = 0
 
-    def get_qs(self, state):
+    def get_qs(self, state, target_model=False):
         state_v = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         with torch.no_grad():
-            qs = self.model(state_v)
+            if target_model == False:
+                qs = self.model(state_v)
+            else:
+                qs = self.target_model(state_v)
         return qs 
     
+    def get_action(self, state, target_model = False):
+        qs = self.get_qs(state, target_model)
+        action = torch.argmax(qs).item()
+        
+        return action #.cpu().numpy()[0]
+
     def reset_agent_weights(self):
         self.model = DQN(self.observarion_space, self.action_space).to(self.device)
         self.target_model = DQN(self.observarion_space, self.action_space).to(self.device)
@@ -231,7 +240,7 @@ def train_trader(ticker, newData = False):
             f"Max Reward: {max_reward:<10.4f} | "
             f"Epsilon: {epsilon:<6.2f}")
         
-        if epsilon < 0.7 and np.mean(evaluate_rewards[-5:]) == reward_valid_env:
+        if epsilon < 0.5 and np.mean(evaluate_rewards[-5:]) == reward_valid_env:
             break
         
         if not weight_reset and len(reward_all) >= 5 and np.mean(evaluate_rewards[-5:]) == 0:
@@ -244,10 +253,10 @@ def train_trader(ticker, newData = False):
         
     return reward_all, evaluate_rewards, test_rewards
 
-def trining_retry_loop(ticker, newData=False):
+def trining_retry_loop(ticker, newData=False, num_retries=15):
     reward_all, evaluate_rewards, test_rewards = [],[],[]
     retry = 0
-    while not reward_all and retry <5:
+    while not reward_all and retry < num_retries:
         reward_all, evaluate_rewards, test_rewards = train_trader(ticker, newData=newData)
         if not reward_all:
             retry +=1
@@ -263,5 +272,5 @@ def trining_retry_loop(ticker, newData=False):
 if __name__=="__main__":
     tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
     for ticker in tickers:
-        reward_all, evaluate_rewards, test_rewards = trining_retry_loop(ticker, newData = False)
+        reward_all, evaluate_rewards, test_rewards = trining_retry_loop(ticker, newData = True)
         training_log_df = upsert_training_logs(reward_all, evaluate_rewards, test_rewards,ticker)

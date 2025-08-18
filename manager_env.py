@@ -127,11 +127,38 @@ class PortfolioEnv(gym.Env):
         self.total_portfolio = curr_value
         portfolio_return = (curr_value - prev_value) / (prev_value + 1e-8)
 
-        entropy_coeff = 0.01
+        entropy_coeff = -0.01
         entropy = -np.sum(allocation * np.log(allocation + 1e-8) + (1 - allocation) * np.log(1 - allocation + 1e-8))
-        reward = np.dot(allocation, portfolio_return ) + entropy_coeff * entropy #* np.ones(self.n_assets)
-        reward = np.clip(reward, -1.0, 1.0)
-        #print(reward)
+        # reward = np.dot(allocation, portfolio_return ) + entropy_coeff * entropy #* np.ones(self.n_assets)
+        # reward = np.average(reward)
+        # reward = np.clip(reward, -1.0, 1.0)
+        
+        if len(self.portfolio_value_history) > 1:
+            portfolio_values = np.array(self.portfolio_value_history)
+            returns = np.diff(portfolio_values) / (portfolio_values[:-1] + 1e-8)
+            
+            if len(returns) > 1:
+                # Calculate Sharpe ratio (assuming risk-free rate = 0)
+                mean_return = np.mean(returns)
+                std_return = np.std(returns) + 1e-8  # Add small epsilon to avoid division by zero
+                sharpe_ratio = mean_return / std_return
+                
+                # Scale and clip Sharpe ratio
+                reward = sharpe_ratio * 100.0  # Scale factor
+                reward = np.clip(reward, -1.0, 1.0)
+                
+                # Add entropy regularization
+                #reward += entropy_coeff * entropy
+            else:
+                # Fallback for early steps
+                reward = portfolio_return * 100.0
+                reward = np.clip(reward, -1.0, 1.0)
+                #reward += entropy_coeff * entropy
+        else:
+            # First step - no history yet
+            reward = 0.0
+        
+        
         self.prev_trader_action = self.trader_action.copy()
         self.prev_allocation = allocation.copy()
         self.portfolio_value_history.append(curr_value)

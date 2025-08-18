@@ -53,83 +53,6 @@ def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:
     #print(allocations)
     return total_reward, steps, info['portfolio_value']
 
-
-# def render_env(env, title_suffix="", asset_index=None):
-#     """
-#     Render the portfolio environment for visualization.
-    
-#     Args:
-#         env: PortfolioEnv environment
-#         title_suffix: Optional suffix for plot title
-#         asset_index: Index of the asset to plot (if None, plot the first asset or aggregate)
-#     """
-#     # If asset_index is not specified, default to the first asset
-#     if asset_index is None:
-#         asset_index = 0
-#     if asset_index >= env.n_assets:
-#         raise ValueError(f"asset_index {asset_index} is out of range for {env.n_assets} assets")
-
-#     # Get price data for the selected asset
-#     prices = env.close_data[env.asset_names[asset_index]].values
-#     buy_points = env.states_buy[asset_index]
-#     sell_points = env.states_sell[asset_index]
-#     allocations = env.states_allocation[asset_index]
-#     shares_buy = env.shares_buy[asset_index]
-#     shares_sell = env.shares_sell[asset_index]
-
-#     # Create figure with two subplots (price and allocation)
-#     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
-
-#     # Plot price
-#     ax1.plot(prices, label=f'Cena ({env.asset_names[asset_index]})', color='black', linewidth=1.5)
-
-#     # Scale marker sizes based on shares
-#     shares_min = min(min(shares_buy, default=0), min(shares_sell, default=0))
-#     shares_max = max(max(shares_buy, default=1), max(shares_sell, default=1))
-#     shares_range = shares_max - shares_min if shares_max != shares_min else 1e-6
-
-#     def scale_marker_size_by_shares(shares):
-#         min_size, max_size = 50, 300
-#         norm = (shares - shares_min) / shares_range
-#         return min_size + (max_size - min_size) * norm
-
-#     # Plot buy points
-#     if buy_points:
-#         buy_sizes = [scale_marker_size_by_shares(shares_buy[j]) for j in range(len(buy_points))]
-#         ax1.scatter(buy_points, prices[buy_points], color='green', marker='^', s=buy_sizes, label='Kup')
-
-#     # Plot sell points
-#     if sell_points:
-#         sell_sizes = [scale_marker_size_by_shares(shares_sell[j]) for j in range(len(sell_points))]
-#         ax1.scatter(sell_points, prices[sell_points], color='red', marker='v', s=sell_sizes, label='Sprzedaj')
-
-#     # Set title and labels for price plot
-#     profit = np.round((env.total_portfolio - env.initial_cash) / env.initial_cash * 100, 2)
-#     ax1.set_ylabel('Cena aktywa')
-#     ax1.legend()
-#     ax1.grid(True)
-#     ax1.set_title(f'Działania agenta dla {env.asset_names[asset_index]} {title_suffix}\n'
-#                   f'Łączny portfel: {env.total_portfolio:.2f} '
-#                   f'Otwarte pozycje: {env.position[asset_index]:.2f} '
-#                   f'Profit: {profit}%')
-
-#     # Plot allocations
-#     if allocations:
-#         alloc_values = [float(a) if isinstance(a, (list, np.ndarray)) else a for a in allocations]
-#         alloc_filtered = np.full(len(prices), np.nan)
-#         for i in buy_points + sell_points:
-#             if i < len(allocations):
-#                 alloc_filtered[i] = alloc_values[i]
-#         ax2.bar(range(len(prices)), np.nan_to_num(alloc_filtered), color='blue', alpha=0.6)
-#         ax2.set_ylim(0, max(alloc_values, default=1))
-
-#     ax2.set_ylabel('Alokacja')
-#     ax2.set_xlabel('Krok czasowy')
-#     ax2.grid(True)
-
-#     plt.tight_layout()
-#     plt.show(block=False)
-#     plt.pause(0.5)
     
     
 def render_env(env, title_suffix="", asset_index=None):
@@ -286,7 +209,7 @@ def render_portfolio_summary(env, title_suffix=""):
     ax2.set_ylabel('Cena znormalizowana')
     ax2.legend()
     ax2.grid(True)
-    
+    print(env.states_allocation)
     # Plot 3: Current portfolio allocation (pie chart)
     ax3 = axes[1, 0]
     current_prices = env.close_data.iloc[env.current_step-1].values
