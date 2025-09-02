@@ -26,23 +26,30 @@ class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=97, out_channels=32, kernel_size=1),  # 97 = liczba cech
+            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),  # 97 = liczba cech
             nn.ReLU(),
             nn.Conv1d(32, 8, kernel_size=1),
             nn.ReLU()
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(8 * action_dim, 8),
+            nn.Linear(8 * action_dim + action_dim + action_dim, 8),
             nn.ReLU(),
             nn.Linear(8, action_dim),        # action_dim = liczba alokacji
-            nn.Softmax(dim=-1)                # ładne rozkłady alokacji
+            nn.Sigmoid()
+            #nn.Softmax(dim=-1)                # ładne rozkłady alokacji
         )
 
     def forward(self, state):
         #print(state.shape)
         x = state.permute(0, 2, 1)  # [B, 4, 97] → [B, 97, 4]
+        trader_actions = x[:, 96, :].unsqueeze(1)   # [B, 1, A]
+        portfolio_features = x[:, 97, :].unsqueeze(1)      # [B, F-97, A] (jeśli istnieją)        x = x[:,:-1,:]
+        x = x[:, :96, :]          # [B, 96, A]
+
         x = self.conv(x)            # [B, 64, 4]
+        #print(f"x shape after conv: {x.shape}, trader_actions shape: {trader_actions.shape}, portfolio_features shape: {portfolio_features.shape}")
+        x = torch.cat([x, trader_actions, portfolio_features], dim=1)
         x = self.fc(x)              # [B, 4]
         return x
         
@@ -50,36 +57,40 @@ class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=97, out_channels=32, kernel_size=1),
+            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
             nn.ReLU(),
             nn.Conv1d(32, 8, kernel_size=1),
             nn.ReLU()
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
-            nn.Linear(8 * action_dim + action_dim, 8),      # dodajemy akcje
+            nn.Linear(8 * action_dim + action_dim + action_dim + action_dim , 8),      # dodajemy akcje
             nn.ReLU(),
-            nn.Linear(8, 1)
+            nn.Linear(8, action_dim)
         )
 
     def forward(self, state, action):
         x = state.permute(0, 2, 1)                   # [B, 97, 4]
+        trader_actions = x[:, 96, :].unsqueeze(1)   # [B, 1, A]
+        portfolio_features = x[:, 97, :].unsqueeze(1)      # [B, F-97, A] (jeśli istnieją)        x = x[:,:-1,:]
+        x = x[:, :96, :]          # [B, 96, A]
+        action = action.unsqueeze(1)  # [B, 1, 4]
         x = self.conv(x)                             # [B, 64, 4]
-        x = x.flatten(start_dim=1)                   # [B, 256]
-        x = torch.cat([x, action], dim=1)            # [B, 256 + 4]
+        x = torch.cat([x, action, trader_actions, portfolio_features], dim=1)            # [B, 256 + 4]
+        
         x = self.fc(x)                               # [B, 1]
         return x
     
 class OUNoise:
     """Ornstein-Uhlenbeck process."""
 
-    def __init__(self, size, mu=0., theta=0.15, sigma=0.4):
+    def __init__(self, size, mu=0., theta=0.015, sigma=0.15):
         """Initialize parameters and noise process."""
         self.mu = mu * np.ones(size)
         self.theta = theta
         self.sigma = sigma
         self.sigma_decay = 0.999995
-        self.min_sigma = 0.1
+        self.min_sigma = 0.01
         self.reset()
 
     def reset(self):
@@ -94,15 +105,24 @@ class OUNoise:
         if self.sigma > self.min_sigma:
             self.sigma *= self.sigma_decay
         #print(f"Current sigma: {self.sigma:.4f}")
+        #self.state = (self.state - self.state.min()) / self.state.max()
         return self.state
     
     def __call__(self, action):
         """Call to sample noise."""
-        return np.clip(action + self.sample(),0,1)
+        res = action.flatten() + self.sample()
+        min_val = np.min(res)
+        max_val = np.max(res)
+
+        #print(min_val, max_val, res)
+        res = (res - min_val) / (max_val - min_val)
+        #print(res)
+        #return res
+        return np.clip(res,0,1)
 
 
 class AgentPortfolio:
-    def __init__(self, input_dim=97, action_dim=6): #27 * 4
+    def __init__(self, input_dim=96, action_dim=12): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -144,14 +164,15 @@ class AgentPortfolio:
 
         actions = np.array([action['portfolio_manager'] for action in actions])
         actions = torch.from_numpy(np.array(actions, dtype=np.float32)).to(self.device)
-
+        #print(rewards)
         rewards = torch.from_numpy(np.array(rewards, dtype=np.float32)).to(self.device)
 
         dones = torch.tensor(dones, dtype=torch.bool).to(self.device)
         #dones = dones.unsqueeze(1).expand(64, 1)
         #print(f'dones shape: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         dones = dones.unsqueeze(1)  
-        rewards = rewards.unsqueeze(1)  # [B, 1]
+        #rewards = rewards.unsqueeze(1)  # [B, 1]
+        #print(f'dones shape after unsqueeze: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         # Krytyk - target Q
         with torch.no_grad():
             next_actions = self.target_actor(next_states)
@@ -190,6 +211,8 @@ class AgentPortfolio:
         with torch.no_grad():
             action = self.actor(state).cpu().numpy()
         # noise = np.random.normal(0, self.noise_std, size=action.shape)
+        # out = self.noise(action)
+        # print(out)
         return self.noise(action) #np.clip(action + noise, 0, 1)
     
     def get_action_target(self, state):
@@ -227,10 +250,9 @@ def train_episode(env,trading_desk, episode, epsilon):
             'trader' : traders_actions,
             'portfolio_manager': np.array([action_allocation_percentages]).flatten()
         }
-        
+        #self._get_obs(), reward, done, info
         new_state, reward, done, info = env.step(action)
-        
-
+        #print(env.current_step)
         episode_reward += reward
         
         portfolio_manager.update_replay_memory((current_state, action, reward, new_state, done))
@@ -252,9 +274,11 @@ def train_episode(env,trading_desk, episode, epsilon):
 
 
 
-tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+#tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
 trading_desk = {}
 data = pd.DataFrame()
+min_size = 9999999
 for ticker in tickers:
     trader = DQNAgent(ticker)
     trader.load_dqn_agent()
@@ -262,8 +286,13 @@ for ticker in tickers:
     train_data, valid_data, test_data = read_stock_data(ticker)
     training_set = pd.concat([train_data, valid_data, test_data])
 
+    min_size = min(min_size, len(training_set))
+
     temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
-    data = pd.concat([data, temp], axis=1)
+
+    temp = temp[:min_size].reset_index(drop=True)
+    data = data[:min_size].reset_index(drop=True)    
+    data = pd.concat([data[:min_size], temp[:min_size]], axis=1)
     trading_desk[ticker] = trader
     
 reward_all = []

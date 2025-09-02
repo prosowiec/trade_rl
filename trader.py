@@ -270,7 +270,9 @@ def trining_retry_loop(ticker, newData=False, num_retries=15):
     return reward_all, evaluate_rewards, test_rewards
 
 if __name__=="__main__":
-    tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+    #tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+    tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
+    
     for ticker in tickers:
         reward_all, evaluate_rewards, test_rewards = trining_retry_loop(ticker, newData = True)
         training_log_df = upsert_training_logs(reward_all, evaluate_rewards, test_rewards,ticker)

@@ -209,7 +209,7 @@ def render_portfolio_summary(env, title_suffix=""):
     ax2.set_ylabel('Cena znormalizowana')
     ax2.legend()
     ax2.grid(True)
-    print(env.states_allocation)
+    
     # Plot 3: Current portfolio allocation (pie chart)
     ax3 = axes[1, 0]
     current_prices = env.close_data.iloc[env.current_step-1].values
@@ -231,7 +231,12 @@ def render_portfolio_summary(env, title_suffix=""):
             sizes.append(position_values[i])
     
     if sizes:
-        ax3.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
+        wedges, texts, autotexts = ax3.pie(
+            sizes, labels=None, autopct='%1.1f%%', startangle=90
+        )
+        ax3.legend(
+            wedges, labels, title="Aktywa", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1)
+        )
         ax3.set_title('Aktualna alokacja portfela')
     else:
         ax3.text(0.5, 0.5, 'Brak pozycji', ha='center', va='center', transform=ax3.transAxes)
