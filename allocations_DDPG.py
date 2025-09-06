@@ -91,6 +91,7 @@ class OUNoise:
         self.sigma = sigma
         self.sigma_decay = 0.999995
         self.min_sigma = 0.01
+        self.size = size
         self.reset()
 
     def reset(self):
@@ -106,10 +107,11 @@ class OUNoise:
             self.sigma *= self.sigma_decay
         #print(f"Current sigma: {self.sigma:.4f}")
         #self.state = (self.state - self.state.min()) / self.state.max()
-        return self.state
+        return self.state # np.random.normal(0, self.sigma, size=(1,self.size)) #
     
     def __call__(self, action):
         """Call to sample noise."""
+        #print(action.flatten())
         res = action.flatten() + self.sample()
         min_val = np.min(res)
         max_val = np.max(res)
@@ -122,7 +124,7 @@ class OUNoise:
 
 
 class AgentPortfolio:
-    def __init__(self, input_dim=96, action_dim=12): #27 * 4
+    def __init__(self, input_dim=96, action_dim=6): #27 * 4
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -144,7 +146,7 @@ class AgentPortfolio:
         self.DISCOUNT = 0.999
         self.TAU = 1e-3  # do soft update
 
-        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.3)
+        self.noise = OUNoise(size=action_dim, mu=0.01, theta=0.15, sigma=0.3)
         # self.noise_std = 0.3
         # self.NOISE_DECAY = 0.9
         # self.MIN_NOISE = 0.05
@@ -170,8 +172,9 @@ class AgentPortfolio:
         dones = torch.tensor(dones, dtype=torch.bool).to(self.device)
         #dones = dones.unsqueeze(1).expand(64, 1)
         #print(f'dones shape: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
+        
         dones = dones.unsqueeze(1)  
-        #rewards = rewards.unsqueeze(1)  # [B, 1]
+        rewards = rewards.unsqueeze(1)  # [B, 1]
         #print(f'dones shape after unsqueeze: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         # Krytyk - target Q
         with torch.no_grad():
@@ -276,6 +279,7 @@ def train_episode(env,trading_desk, episode, epsilon):
 
 #tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
 tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+#tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
 trading_desk = {}
 data = pd.DataFrame()
 min_size = 9999999
@@ -297,7 +301,7 @@ for ticker in tickers:
     
 reward_all = []
 evaluate_revards = []
-portfolio_manager = AgentPortfolio()
+portfolio_manager = AgentPortfolio(input_dim=96, action_dim=len(tickers))
 epsilon = 1
 
 
@@ -328,5 +332,5 @@ for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
 
     render_portfolio_summary(valid_env)
     
-    print(info)
+    print(info, portfolio_manager.noise.sigma)
     evaluate_revards.append(info)

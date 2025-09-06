@@ -185,7 +185,7 @@ def render_portfolio_summary(env, title_suffix=""):
         env: PortfolioEnv environment
         title_suffix: Optional suffix for plot title
     """
-    fig, axes = plt.subplots(2, 2, figsize=(18, 12))
+    fig, axes = plt.subplots(3, 2, figsize=(18, 12))
     
     # Plot 1: Portfolio value over time
     ax1 = axes[0, 0]
@@ -210,25 +210,33 @@ def render_portfolio_summary(env, title_suffix=""):
     ax2.legend()
     ax2.grid(True)
     
-    # Plot 3: Current portfolio allocation (pie chart)
+    # Plot 3: Current portfolio allocation (pie chart with percentages)
     ax3 = axes[1, 0]
     current_prices = env.close_data.iloc[env.current_step-1].values
     position_values = env.position * current_prices
     
+    # Calculate total portfolio value
+    total_portfolio_value = env.cash + np.sum(position_values)
+    
     # Create pie chart data
     labels = []
     sizes = []
+    percentages = []
     
     # Add cash
     if env.cash > 0:
-        labels.append('Gotówka')
+        cash_pct = (env.cash / total_portfolio_value) * 100
+        labels.append(f'Gotówka ({cash_pct:.1f}%)')
         sizes.append(env.cash)
+        percentages.append(cash_pct)
     
     # Add asset positions
     for i, asset_name in enumerate(env.asset_names):
         if position_values[i] > 0:
-            labels.append(asset_name)
+            asset_pct = (position_values[i] / total_portfolio_value) * 100
+            labels.append(f'{asset_name} ({asset_pct:.1f}%)')
             sizes.append(position_values[i])
+            percentages.append(asset_pct)
     
     if sizes:
         wedges, texts, autotexts = ax3.pie(
@@ -237,7 +245,7 @@ def render_portfolio_summary(env, title_suffix=""):
         ax3.legend(
             wedges, labels, title="Aktywa", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1)
         )
-        ax3.set_title('Aktualna alokacja portfela')
+        ax3.set_title(f'Aktualna alokacja portfela\n(Całkowita wartość: {total_portfolio_value:.2f})')
     else:
         ax3.text(0.5, 0.5, 'Brak pozycji', ha='center', va='center', transform=ax3.transAxes)
         ax3.set_title('Aktualna alokacja portfela')
@@ -272,6 +280,102 @@ def render_portfolio_summary(env, title_suffix=""):
     else:
         ax4.text(0.5, 0.5, 'Brak aktywności handlowej', ha='center', va='center', transform=ax4.transAxes)
         ax4.set_title('Aktywność handlowa')
+    
+    # Plot 5: Portfolio allocation over time (absolute values using shares)
+    ax5 = axes[2, 0]
+    if hasattr(env, 'asset_value_history') and len(env.asset_value_history[0]) > 0:
+        time_steps = range(len(env.asset_value_history[0]))
+        
+        # Calculate cash history if not available
+        if hasattr(env, 'cash_history'):
+            cash_history = env.cash_history
+        else:
+            # Reconstruct cash history from portfolio value and asset values
+            cash_history = []
+            for step in range(len(time_steps)):
+                total_asset_value = sum(env.asset_value_history[i][step] for i in range(env.n_assets))
+                if step < len(env.portfolio_value_history):
+                    cash_at_step = env.portfolio_value_history[step] - total_asset_value
+                    cash_history.append(max(0, cash_at_step))
+                else:
+                    cash_history.append(env.cash)
+        
+        # Plot cash
+        ax5.fill_between(time_steps, 0, cash_history[:len(time_steps)], alpha=0.7, label='Gotówka', color='green')
+        
+        # Plot assets stacked
+        bottom = cash_history[:len(time_steps)]
+        colors = plt.cm.Set3(np.linspace(0, 1, env.n_assets))
+        
+        for i, asset_name in enumerate(env.asset_names):
+            asset_values = env.asset_value_history[i][:len(time_steps)]
+            ax5.fill_between(time_steps, bottom, 
+                            [b + v for b, v in zip(bottom, asset_values)], 
+                            alpha=0.7, label=asset_name, color=colors[i])
+            bottom = [b + v for b, v in zip(bottom, asset_values)]
+        
+        ax5.set_title('Alokacja portfela w czasie (wartości)')
+        ax5.set_xlabel('Krok czasowy')
+        ax5.set_ylabel('Wartość')
+        ax5.legend()
+        ax5.grid(True, alpha=0.3)
+    else:
+        ax5.text(0.5, 0.5, 'Brak historii wartości aktywów', ha='center', va='center', transform=ax5.transAxes)
+        ax5.set_title('Alokacja portfela w czasie')
+    
+    # Plot 6: Portfolio allocation over time (percentages)
+    ax6 = axes[2, 1]
+    if hasattr(env, 'asset_value_history') and len(env.asset_value_history[0]) > 0:
+        time_steps = range(len(env.asset_value_history[0]))
+        
+        # Calculate percentage allocation history
+        cash_history = []
+        for step in range(len(time_steps)):
+            total_asset_value = sum(env.asset_value_history[i][step] for i in range(env.n_assets))
+            if step < len(env.portfolio_value_history):
+                cash_at_step = env.portfolio_value_history[step] - total_asset_value
+                cash_history.append(max(0, cash_at_step))
+            else:
+                cash_history.append(env.cash)
+        
+        percentage_history = {'cash': [], 'assets': {name: [] for name in env.asset_names}}
+        
+        for step in range(len(time_steps)):
+            total_value = cash_history[step] + sum(env.asset_value_history[i][step] for i in range(env.n_assets))
+            
+            if total_value > 0:
+                percentage_history['cash'].append((cash_history[step] / total_value) * 100)
+                for i, asset_name in enumerate(env.asset_names):
+                    percentage_history['assets'][asset_name].append((env.asset_value_history[i][step] / total_value) * 100)
+            else:
+                percentage_history['cash'].append(0)
+                for asset_name in env.asset_names:
+                    percentage_history['assets'][asset_name].append(0)
+        
+        # Plot cash percentage
+        ax6.fill_between(time_steps, 0, percentage_history['cash'], 
+                         alpha=0.7, label='Gotówka', color='green')
+        
+        # Plot assets stacked
+        bottom_pct = percentage_history['cash'].copy()
+        colors = plt.cm.Set3(np.linspace(0, 1, env.n_assets))
+        
+        for i, asset_name in enumerate(env.asset_names):
+            asset_pct = percentage_history['assets'][asset_name]
+            ax6.fill_between(time_steps, bottom_pct, 
+                            [b + v for b, v in zip(bottom_pct, asset_pct)], 
+                            alpha=0.7, label=asset_name, color=colors[i])
+            bottom_pct = [b + v for b, v in zip(bottom_pct, asset_pct)]
+        
+        ax6.set_title('Alokacja portfela w czasie (%)')
+        ax6.set_xlabel('Krok czasowy')
+        ax6.set_ylabel('Procent portfela (%)')
+        ax6.set_ylim(0, 100)
+        ax6.legend()
+        ax6.grid(True, alpha=0.3)
+    else:
+        ax6.text(0.5, 0.5, 'Brak historii wartości aktywów', ha='center', va='center', transform=ax6.transAxes)
+        ax6.set_title('Alokacja portfela w czasie (%)')
     
     plt.suptitle(f'Podsumowanie portfela {title_suffix}', fontsize=16)
     plt.tight_layout()

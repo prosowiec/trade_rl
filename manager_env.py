@@ -76,6 +76,7 @@ class PortfolioEnv(gym.Env):
         self.states_allocation = [[] for _ in range(self.n_assets)]
         self.shares_buy = [[] for _ in range(self.n_assets)]
         self.shares_sell = [[] for _ in range(self.n_assets)]
+        self.asset_value_history = [[] for _ in range(self.n_assets)]
         
         return self._get_obs()
 
@@ -141,37 +142,35 @@ class PortfolioEnv(gym.Env):
                 invest_amount = self.cash * alloc
                 cost = invest_amount + self.transaction_cost
                 shares = invest_amount / price
-                if cost <= self.cash:
-                    self.position[i] += shares
-                    self.cash -= cost
-                    transaction_cost_total += self.transaction_cost
-                    executed = True
-                    
-                    # Track buy action
-                    self.states_buy[i].append(self.current_step)
-                    self.shares_buy[i].append(shares)
-                else:
-                    # Track failed buy attempt (optional)
-                    self.shares_buy[i].append(0)
+                cost = min(cost, self.cash)  # nie można wydać więcej niż mamy gotówki
+                
+                self.position[i] += shares
+                self.cash -= cost
+                transaction_cost_total += self.transaction_cost
+                executed = True
+                
+                # Track buy action
+                self.states_buy[i].append(self.current_step)
+                self.shares_buy[i].append(shares)
                     
             elif act == 2:  # SELL
                 shares_to_sell = self.position[i] * alloc
-                if shares_to_sell > 0:
-                    revenue = shares_to_sell * price
-                    self.position[i] -= shares_to_sell
-                    self.cash += revenue  # koszt transakcji pomijany przy sprzedaży
-                    executed = True
+                shares_to_sell = min(shares_to_sell, self.position[i])  # nie można sprzedać więcej niż się posiada
+                revenue = shares_to_sell * price
+                self.position[i] -= shares_to_sell
+                self.cash += revenue  # koszt transakcji pomijany przy sprzedaży
+                executed = True
                     
-                    # Track sell action
-                    self.states_sell[i].append(self.current_step)
-                    self.shares_sell[i].append(shares_to_sell)
-                else:
-                    # Track failed sell attempt (optional)
-                    self.shares_sell[i].append(0)
+                self.states_sell[i].append(self.current_step)
+                self.shares_sell[i].append(shares_to_sell)
+                
             else:
                 # For hold actions, add 0 shares
                 self.shares_buy[i].append(0)
                 self.shares_sell[i].append(0)
+            
+            asset_value = self.position[i] * curr_prices[i]
+            self.asset_value_history[i].append(asset_value)
 
 
         entropy_coeff = 0.2
@@ -197,45 +196,29 @@ class PortfolioEnv(gym.Env):
         reward = np.clip(reward, -1.0, 1.0)
         #print(reward)
 
-        # if len(self.portfolio_value_history) > 1:
-        #     portfolio_values = np.array(self.portfolio_value_history)
-        #     returns = np.diff(portfolio_values) / (portfolio_values[:-1] + 1e-8)
-            
-        #     if len(returns) > 1:
-        #         # Calculate Sharpe ratio (assuming risk-free rate = 0)
-        #         mean_return = np.mean(returns)
-        #         std_return = np.std(returns) + 1e-8  # Add small epsilon to avoid division by zero
-        #         sharpe_ratio = mean_return / std_return
-                
-        #         # Scale and clip Sharpe ratio
-        #         reward = sharpe_ratio * 100.0  # Scale factor
-        #         reward = np.clip(reward, -1.0, 1.0)
-                
-        #         # Add entropy regularization
-        #         #reward += entropy_coeff * entropy
-        #     else:
-        #         # Fallback for early steps
-        #         reward = portfolio_return * 100.0
-        #         reward = np.clip(reward, -1.0, 1.0)
-        #         #reward += entropy_coeff * entropy
-        # else:
-        #     # First step - no history yet
-        #     reward = 0.0
-        # if len(self.portfolio_value_history) > 1:
-        #     portfolio_values = np.array(self.portfolio_value_history)
-        #     returns = np.diff(portfolio_values) / (portfolio_values[:-1] + 1e-8)
-        #     R_t = returns[-1]  # ostatnia stopa zwrotu
+        asset_sharpes = []
+        for i in range(self.n_assets):
+            if len(self.asset_value_history[i]) > 1:
+                values = np.array(self.asset_value_history[i])
+                returns = np.diff(values) / (values[:-1] + 1e-8)
+                if len(returns) > 1:
+                    mean_r = np.mean(returns)
+                    std_r = np.std(returns) + 1e-8
+                    sharpe = mean_r / std_r
+                    asset_sharpes.append(sharpe)
+                else:
+                    asset_sharpes.append(0.0)
+            else:
+                asset_sharpes.append(0.0)
 
-        #     # Differential Sharpe Ratio jako nagroda
-        #     reward = self.dsr.update(R_t)
+        asset_sharpes = np.array(asset_sharpes)
 
-        #     # Skalowanie i przycięcie
-        #     reward = np.clip(reward, -1.0, 1.0)
-        # else:
-        #     reward = 0.0
-        
-        # reward = np.dot(allocation, reward )
-        # reward = np.clip(reward, -1.0, 1.0)
+        # Ważone Sharpe wg allocation (to zachęca do alokowania w aktywa z lepszym profilem ryzyko/zwrot)
+        reward = np.dot(allocation, asset_sharpes)
+        #reward = asset_sharpes
+        #print(reward)
+        # Klipowanie
+        reward = np.clip(reward, -1.0, 1.0) 
         
         
         #print(f"Current step {self.current_step} | Reward {reward} | Allocations {allocation}")
