@@ -214,7 +214,7 @@ class PortfolioEnv(gym.Env):
         asset_sharpes = np.array(asset_sharpes)
 
         # Ważone Sharpe wg allocation (to zachęca do alokowania w aktywa z lepszym profilem ryzyko/zwrot)
-        reward = np.dot(allocation, asset_sharpes)
+        reward = np.dot(allocation, portfolio_return)
         #reward = asset_sharpes
         #print(reward)
         # Klipowanie

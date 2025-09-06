@@ -89,7 +89,7 @@ class OUNoise:
         self.mu = mu * np.ones(size)
         self.theta = theta
         self.sigma = sigma
-        self.sigma_decay = 0.999995
+        self.sigma_decay = 0.99999
         self.min_sigma = 0.01
         self.size = size
         self.reset()
@@ -146,7 +146,7 @@ class AgentPortfolio:
         self.DISCOUNT = 0.999
         self.TAU = 1e-3  # do soft update
 
-        self.noise = OUNoise(size=action_dim, mu=0.01, theta=0.15, sigma=0.3)
+        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.5)
         # self.noise_std = 0.3
         # self.NOISE_DECAY = 0.9
         # self.MIN_NOISE = 0.05
@@ -174,7 +174,7 @@ class AgentPortfolio:
         #print(f'dones shape: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         
         dones = dones.unsqueeze(1)  
-        rewards = rewards.unsqueeze(1)  # [B, 1]
+        #rewards = rewards.unsqueeze(1)  # [B, 1]
         #print(f'dones shape after unsqueeze: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         # Krytyk - target Q
         with torch.no_grad():
