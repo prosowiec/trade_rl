@@ -26,17 +26,17 @@ class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),  # 97 = liczba cech
+            nn.Conv1d(in_channels=96, out_channels=8, kernel_size=1),  # 97 = liczba cech
             nn.ReLU(),
-            nn.Conv1d(32, 8, kernel_size=1),
-            nn.ReLU()
+            #nn.Conv1d(32, 8, kernel_size=1),
+            #nn.ReLU()
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(8 * action_dim + action_dim + action_dim, 8),
-            nn.ReLU(),
-            nn.Linear(8, action_dim),        # action_dim = liczba alokacji
-            nn.Sigmoid()
+            nn.Linear(8 * action_dim + action_dim + action_dim, action_dim),
+            nn.Sigmoid()               
+            # nn.Linear(8, action_dim),        # action_dim = liczba alokacji
+            # nn.Sigmoid()
             #nn.Softmax(dim=-1)                # ładne rozkłady alokacji
         )
 
@@ -57,16 +57,16 @@ class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv1d(32, 8, kernel_size=1),
+            nn.Conv1d(in_channels=96, out_channels=8, kernel_size=1),
+            #nn.ReLU(),
+            #nn.Conv1d(32, 8, kernel_size=1),
             nn.ReLU()
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
-            nn.Linear(8 * action_dim + action_dim + action_dim + action_dim , 8),      # dodajemy akcje
-            nn.ReLU(),
-            nn.Linear(8, action_dim)
+            nn.Linear(8 * action_dim + action_dim + action_dim + action_dim , action_dim),      # dodajemy akcje
+            # nn.ReLU(),
+            # nn.Linear(8, action_dim)
         )
 
     def forward(self, state, action):
@@ -106,7 +106,7 @@ class OUNoise:
         if self.sigma > self.min_sigma:
             self.sigma *= self.sigma_decay
         #print(f"Current sigma: {self.sigma:.4f}")
-        #self.state = (self.state - self.state.min()) / self.state.max()
+        self.state = (self.state - self.state.min()) / self.state.max() / self.size
         return self.state # np.random.normal(0, self.sigma, size=(1,self.size)) #
     
     def __call__(self, action):
@@ -117,7 +117,7 @@ class OUNoise:
         max_val = np.max(res)
 
         #print(min_val, max_val, res)
-        res = (res - min_val) / (max_val - min_val)
+        #res = (res - min_val) / (max_val - min_val)
         #print(res)
         #return res
         return np.clip(res,0,1)
@@ -146,7 +146,7 @@ class AgentPortfolio:
         self.DISCOUNT = 0.999
         self.TAU = 1e-3  # do soft update
 
-        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.5)
+        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=1)
         # self.noise_std = 0.3
         # self.NOISE_DECAY = 0.9
         # self.MIN_NOISE = 0.05
@@ -174,7 +174,7 @@ class AgentPortfolio:
         #print(f'dones shape: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         
         dones = dones.unsqueeze(1)  
-        #rewards = rewards.unsqueeze(1)  # [B, 1]
+        rewards = rewards.unsqueeze(1)  # [B, 1]
         #print(f'dones shape after unsqueeze: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         # Krytyk - target Q
         with torch.no_grad():
@@ -194,7 +194,6 @@ class AgentPortfolio:
         actor_loss = -self.critic(states, predicted_actions).mean()
         
         
-
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
@@ -277,7 +276,7 @@ def train_episode(env,trading_desk, episode, epsilon):
 
 
 
-#tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
 tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
 #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
 trading_desk = {}
