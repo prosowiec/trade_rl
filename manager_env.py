@@ -78,6 +78,9 @@ class PortfolioEnv(gym.Env):
         self.shares_sell = [[] for _ in range(self.n_assets)]
         self.asset_value_history = [[] for _ in range(self.n_assets)]
         
+        self.asset_percentage_sell_history = [[] for _ in range(self.n_assets)]
+        self.asset_percentage_buy_history = [[] for _ in range(self.n_assets)]
+        
         return self._get_obs()
 
     def _get_obs(self):
@@ -124,8 +127,8 @@ class PortfolioEnv(gym.Env):
         transaction_cost_total = 0
 
         #print(allocation)
-        if np.any(np.isnan(allocation)) or np.any(allocation < 0) or np.any(allocation > 1):
-            return self._get_obs(), -1.0, False, {'error': 'Invalid allocation'}
+        # if np.any(np.isnan(allocation)) or np.any(allocation < 0) or np.any(allocation > 1):
+        #     return self._get_obs(), -1.0, False, {'error': 'Invalid allocation'}
 
         MAX_ALLOCATION = 0.3  # 30% maksymalnie dla pojedynczego aktywa
         #allocation = np.clip(allocation, 0, MAX_ALLOCATION)
@@ -163,6 +166,7 @@ class PortfolioEnv(gym.Env):
                 # Track buy action
                 self.states_buy[i].append(self.current_step)
                 self.shares_buy[i].append(shares)
+                self.asset_percentage_buy_history[i].append(shares * price / (prev_value + 1e-8))
                     
             elif act == 2:  # SELL
                 shares_to_sell = self.position[i] * alloc
@@ -174,11 +178,15 @@ class PortfolioEnv(gym.Env):
                     
                 self.states_sell[i].append(self.current_step)
                 self.shares_sell[i].append(shares_to_sell)
+                self.asset_percentage_sell_history[i].append(shares_to_sell * price / (prev_value + 1e-8))
                 
             else:
                 # For hold actions, add 0 shares
                 self.shares_buy[i].append(0)
                 self.shares_sell[i].append(0)
+                self.asset_percentage_sell_history[i].append(0)
+                self.asset_percentage_buy_history[i].append(0)
+
             
             asset_value = self.position[i] * curr_prices[i]
             self.asset_value_history[i].append(asset_value)

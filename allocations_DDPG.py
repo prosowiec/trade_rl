@@ -276,9 +276,9 @@ def train_episode(env,trading_desk, episode, epsilon):
 
 
 
-tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-#tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
+#tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+#tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
 trading_desk = {}
 data = pd.DataFrame()
 min_size = 9999999

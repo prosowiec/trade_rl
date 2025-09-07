@@ -197,7 +197,8 @@ def render_portfolio_summary(env, title_suffix=""):
         ax1.set_ylabel('Wartość portfela')
         ax1.grid(True)
         ax1.legend()
-    
+    #print(len(env.portfolio_value_history))
+    #print(len(env.asset_value_history[0]))
     # Plot 2: Asset prices (normalized)
     ax2 = axes[0, 1]
     colors = plt.cm.Set3(np.linspace(0, 1, env.n_assets))
@@ -255,20 +256,23 @@ def render_portfolio_summary(env, title_suffix=""):
     
     # Create trading activity matrix
     max_steps = max(len(env.states_buy[i]) + len(env.states_sell[i]) for i in range(env.n_assets))
+    #print(len(env.states_sell[0]))
+    #print(max_steps)
     if max_steps > 0:
         activity_matrix = np.zeros((env.n_assets, env.current_step - env.window_size))
-        
+    
         for i in range(env.n_assets):
-            # Mark buy actions
-            for step in env.states_buy[i]:
+
+            for j, step in enumerate(env.states_buy[i]):
                 if step - env.window_size >= 0 and step - env.window_size < activity_matrix.shape[1]:
-                    activity_matrix[i, step - env.window_size] = 1
-            # Mark sell actions
-            for step in env.states_sell[i]:
+                    #print(step,env.asset_percentage_buy_history[i][step])
+                    activity_matrix[i, step - env.window_size] = env.asset_percentage_buy_history[i][j]
+                    print(j,step,env.asset_percentage_buy_history[i][j])
+            for j,step in enumerate(env.states_sell[i]):
                 if step - env.window_size >= 0 and step - env.window_size < activity_matrix.shape[1]:
-                    activity_matrix[i, step - env.window_size] = -1
+                    activity_matrix[i, step - env.window_size] = env.asset_percentage_sell_history[i][j] * -1  
         
-        im = ax4.imshow(activity_matrix, cmap='RdYlGn', aspect='auto', vmin=-1, vmax=1)
+        im = ax4.imshow(activity_matrix, cmap='RdYlGn', aspect='auto', vmin=-0.3, vmax=0.3)
         ax4.set_yticks(range(env.n_assets))
         ax4.set_yticklabels(env.asset_names)
         ax4.set_title('Aktywność handlowa\n(Zielony=Kup, Czerwony=Sprzedaj)')
