@@ -2,37 +2,31 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import gym
 from collections import deque
-import time
 import random
 from tqdm import tqdm
-import os
 import pandas as pd
-import matplotlib.pyplot as plt
 import copy
 
 from trader import DQNAgent
 from source.database import read_stock_data
-from copy import deepcopy
-#from enviroments import TimeSeriesEnv_simple
-from gym import spaces
-from eval_portfolio import evaluate_steps_portfolio, render_env, render_portfolio_summary
+from eval_portfolio import evaluate_steps_portfolio, render_portfolio_summary
 from manager_env import PortfolioEnv
-import os
+from noise import OUNoise
 import logging
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()]  # możesz dodać FileHandler do pliku
+    handlers=[logging.StreamHandler()]
 )
 
 class Actor(nn.Module):
-    def __init__(self, action_dim):  # state_dim = [n_assets, features] = [4, 97]
+    def __init__(self,input_dim, action_dim):
         super(Actor, self).__init__()
+        self.input_dim = input_dim
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
+            nn.Conv1d(in_channels=self.input_dim, out_channels=32, kernel_size=1),
             nn.ReLU(),
             nn.Conv1d(32, 2, kernel_size=1),
             nn.ReLU()
@@ -46,9 +40,9 @@ class Actor(nn.Module):
 
     def forward(self, state):
         x = state.permute(0, 2, 1)  # [batch, assets, sequence] → [B, sequence, assets]
-        trader_actions = x[:, 96, :].unsqueeze(1)
-        portfolio_features = x[:, 97, :].unsqueeze(1)
-        x = x[:, :96, :]          # [B, 96, A]
+        trader_actions = x[:, self.input_dim, :].unsqueeze(1)
+        portfolio_features = x[:, self.input_dim + 1, :].unsqueeze(1)
+        x = x[:, :self.input_dim, :]          # [B, 96, A]
 
         x = self.conv(x)            # [B, 64, 4]
         x = torch.cat([x, trader_actions, portfolio_features], dim=1)
@@ -56,8 +50,9 @@ class Actor(nn.Module):
         return x
         
 class Critic(nn.Module):
-    def __init__(self, action_dim):
+    def __init__(self,input_dim, action_dim):
         super(Critic, self).__init__()
+        self.input_dim = input_dim
         self.conv = nn.Sequential(
             nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
             nn.ReLU(),
@@ -71,50 +66,18 @@ class Critic(nn.Module):
 
     def forward(self, state, action):
         x = state.permute(0, 2, 1)               
-        trader_actions = x[:, 96, :].unsqueeze(1)   
-        portfolio_features = x[:, 97, :].unsqueeze(1)      
-        x = x[:, :96, :]          
+        trader_actions = x[:, self.input_dim, :].unsqueeze(1)   
+        portfolio_features = x[:, self.input_dim + 1, :].unsqueeze(1)      
+        x = x[:, :self.input_dim, :]          
         action = action.unsqueeze(1)  
         x = self.conv(x)                            
         x = torch.cat([x, action, trader_actions, portfolio_features], dim=1)            
         x = self.fc(x) 
         return x
     
-class OUNoise:
-    """Ornstein-Uhlenbeck process."""
-
-    def __init__(self, size, mu=0., theta=0.015, sigma=0.15):
-        """Initialize parameters and noise process."""
-        self.mu = mu * np.ones(size)
-        self.theta = theta
-        self.sigma = sigma
-        self.sigma_decay = 0.99995
-        self.min_sigma = 0.01
-        self.size = size
-        self.reset()
-
-    def reset(self):
-        """Reset the internal state (= noise) to mean (mu)."""
-        self.state = copy.copy(self.mu)
-
-    def sample(self):
-        """Update internal state and return it as a noise sample."""
-        x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.array([np.random.randn() for i in range(len(x))])
-        self.state = x + dx
-        if self.sigma > self.min_sigma:
-            self.sigma *= self.sigma_decay
-
-        return self.state
-    
-    def __call__(self, action):
-        """Call to sample noise."""
-        res = action.flatten() + self.sample()
-        return np.clip(res,0,1)
-
 
 class AgentPortfolio:
-    def __init__(self, input_dim=96, action_dim=6): #27 * 4
+    def __init__(self, input_dim=96, action_dim=6):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -134,7 +97,7 @@ class AgentPortfolio:
         self.MIN_REPLAY_MEMORY_SIZE = 1000
         self.MINIBATCH_SIZE = 128
         self.DISCOUNT = 0.9995
-        self.TAU = 1e-4  # do soft update
+        self.TAU = 1e-4
 
         self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.5)
 
@@ -142,7 +105,7 @@ class AgentPortfolio:
     def update_replay_memory(self, transition):
         self.replay_memory.append(transition)
 
-    def train(self, terminal_state):
+    def train(self):
         if len(self.replay_memory) < self.MIN_REPLAY_MEMORY_SIZE:
             return
 
@@ -163,7 +126,7 @@ class AgentPortfolio:
         with torch.no_grad():
             next_actions = self.target_actor(next_states)
             target_q = self.target_critic(next_states, next_actions)
-            target_q = rewards + self.DISCOUNT * target_q # (~dones) - nie ppotrzebuje bo to time series
+            target_q = rewards + self.DISCOUNT * target_q * (~dones)
 
         current_q = self.critic(states, actions)
         critic_loss = self.loss_fn(current_q, target_q)
@@ -190,7 +153,7 @@ class AgentPortfolio:
         for target_param, param in zip(target_net.parameters(), net.parameters()):
             target_param.data.copy_(self.TAU * param.data + (1.0 - self.TAU) * target_param.data)
 
-    def get_action(self, state, noise_std=0.1):
+    def get_action(self, state):
         state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         with torch.no_grad():
             action = self.actor(state).cpu().numpy()
@@ -203,7 +166,7 @@ class AgentPortfolio:
 
         return np.clip(action, 0, 1)
 
-def train_episode(env,trading_desk, episode, epsilon):
+def train_porfolio_manager(env, trading_desk, episode):
     episode_reward = 0
     step = 1
 
@@ -229,15 +192,15 @@ def train_episode(env,trading_desk, episode, epsilon):
         
         portfolio_manager.update_replay_memory((current_state, action, reward, new_state, done))
         
-        portfolio_manager.train(done)
+        portfolio_manager.train()
+        
         current_state = new_state
         step += 1
  
     if not episode % 1:
-        logging.info(f"Episode: {episode} | Total Reward: {env.total_portfolio:.2f} | Epsilon: {epsilon:.2f}")
+        logging.info(f"Episode: {episode} | Total Reward: {env.total_portfolio:.2f}")
     
     return episode_reward
-
 
 
 
@@ -273,7 +236,6 @@ for ticker in tickers:
 reward_all = []
 evaluate_revards = []
 portfolio_manager = AgentPortfolio(input_dim=96, action_dim=len(tickers))
-epsilon = 1
 
 
 data_split = int(len(data)  * 0.8)
@@ -292,8 +254,7 @@ evaluate_every = 1
 logging.info(f'Starting training over {EPISODES} episodes, for {env.close_data.shape[1]} tickers, each with {env.close_data.shape[0]} steps, window size {WINDOW_SIZE}')
 
 for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
-    reward = train_episode(env,trading_desk, episode,epsilon)
-    
+    reward = train_porfolio_manager(env, trading_desk, episode)
     
     logging.info("Rendering validation environment...")
     valid_env.reset()

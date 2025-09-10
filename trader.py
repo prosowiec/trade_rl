@@ -20,8 +20,9 @@ os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()]  # możesz dodać FileHandler do pliku
+    handlers=[logging.StreamHandler()]
 )
+
 class DQN(nn.Module):
 	def __init__(self, input_dim, output_dim):
 		super(DQN, self).__init__()
@@ -275,15 +276,11 @@ def trining_retry_loop(ticker, newData=False, num_retries=15):
     return reward_all, evaluate_rewards, test_rewards
 
 if __name__=="__main__":
-    #tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-    #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"] ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-    # ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
-    # 'META', 'AVGO', 'TSLA', 
-    tickers = ['JPM',
-    'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
-    'MA', 'XOM', 'JNJ'  
-    ]
-
+    tickers =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
+                'META', 'AVGO', 'TSLA', 'JPM',
+                'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
+                'MA', 'XOM', 'JNJ'  
+        ]
     for ticker in tickers:
         logging.info(f'================ Training {ticker} ================')
         reward_all, evaluate_rewards, test_rewards = trining_retry_loop(ticker, newData = True)

@@ -1,9 +1,6 @@
 import gym
 from gym import spaces
 import numpy as np
-import torch
-import pandas as pd
-import ta  
 
 
 class TimeSeriesEnv_simple(gym.Env):
