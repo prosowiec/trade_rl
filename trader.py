@@ -271,8 +271,15 @@ def trining_retry_loop(ticker, newData=False, num_retries=15):
 
 if __name__=="__main__":
     #tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-    tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
-    
+    #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"] ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+    # ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
+    # 'META', 'AVGO', 'TSLA', 
+    tickers = ['JPM',
+    'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
+    'MA', 'XOM', 'JNJ'  
+    ]
+
     for ticker in tickers:
+        print(f'================ Training {ticker} ================')
         reward_all, evaluate_rewards, test_rewards = trining_retry_loop(ticker, newData = True)
         training_log_df = upsert_training_logs(reward_all, evaluate_rewards, test_rewards,ticker)

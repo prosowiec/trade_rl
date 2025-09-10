@@ -26,17 +26,18 @@ class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=96, out_channels=8, kernel_size=1),  # 97 = liczba cech
+            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
             nn.ReLU(),
-            #nn.Conv1d(32, 8, kernel_size=1),
-            #nn.ReLU()
+            nn.Conv1d(32, 2, kernel_size=1),
+            nn.ReLU()
+            
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(8 * action_dim + action_dim + action_dim, action_dim),
-            nn.Sigmoid()               
-            # nn.Linear(8, action_dim),        # action_dim = liczba alokacji
-            # nn.Sigmoid()
+            nn.Linear(2 * action_dim + 2 * action_dim, action_dim),
+            #nn.Softmax(dim=1)
+            #nn.Linear(8, action_dim),        # action_dim = liczba alokacji
+            nn.Softmax(dim=-1)
             #nn.Softmax(dim=-1)                # ładne rozkłady alokacji
         )
 
@@ -57,15 +58,15 @@ class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=96, out_channels=8, kernel_size=1),
-            #nn.ReLU(),
-            #nn.Conv1d(32, 8, kernel_size=1),
+            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv1d(32, 2, kernel_size=1),
             nn.ReLU()
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                            # [B, 64, 4] → [B, 256]
-            nn.Linear(8 * action_dim + action_dim + action_dim + action_dim , action_dim),      # dodajemy akcje
-            # nn.ReLU(),
+            nn.Linear(2 * action_dim + 3 * action_dim , 8),      # dodajemy akcje
+            #nn.ReLU(),
             # nn.Linear(8, action_dim)
         )
 
@@ -89,7 +90,7 @@ class OUNoise:
         self.mu = mu * np.ones(size)
         self.theta = theta
         self.sigma = sigma
-        self.sigma_decay = 0.99999
+        self.sigma_decay = 0.99995
         self.min_sigma = 0.01
         self.size = size
         self.reset()
@@ -106,7 +107,7 @@ class OUNoise:
         if self.sigma > self.min_sigma:
             self.sigma *= self.sigma_decay
         #print(f"Current sigma: {self.sigma:.4f}")
-        self.state = (self.state - self.state.min()) / self.state.max() / self.size
+        #self.state = (self.state - self.state.min()) / self.state.max()
         return self.state # np.random.normal(0, self.sigma, size=(1,self.size)) #
     
     def __call__(self, action):
@@ -135,21 +136,19 @@ class AgentPortfolio:
         self.target_actor.load_state_dict(self.actor.state_dict())
         self.target_critic.load_state_dict(self.critic.state_dict())
 
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-3)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=1e-3)
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-4)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=1e-4, weight_decay=1e-2)
 
         self.loss_fn = nn.MSELoss()
 
-        self.replay_memory = deque(maxlen=50000)
-        self.MIN_REPLAY_MEMORY_SIZE = 500
-        self.MINIBATCH_SIZE = 64
-        self.DISCOUNT = 0.999
-        self.TAU = 1e-3  # do soft update
+        self.replay_memory = deque(maxlen=5000000)
+        self.MIN_REPLAY_MEMORY_SIZE = 1000
+        self.MINIBATCH_SIZE = 128
+        self.DISCOUNT = 0.9995
+        self.TAU = 1e-4  # do soft update
 
-        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=1)
-        # self.noise_std = 0.3
-        # self.NOISE_DECAY = 0.9
-        # self.MIN_NOISE = 0.05
+        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.5)
+
         
     def update_replay_memory(self, transition):
         self.replay_memory.append(transition)
@@ -173,14 +172,14 @@ class AgentPortfolio:
         #dones = dones.unsqueeze(1).expand(64, 1)
         #print(f'dones shape: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         
-        dones = dones.unsqueeze(1)  
-        rewards = rewards.unsqueeze(1)  # [B, 1]
+        dones = dones.unsqueeze(1)
+        rewards = rewards.unsqueeze(1)
         #print(f'dones shape after unsqueeze: {dones.shape}, actions shape: {actions.shape}, rewards shape: {rewards.shape}')
         # Krytyk - target Q
         with torch.no_grad():
             next_actions = self.target_actor(next_states)
             target_q = self.target_critic(next_states, next_actions)
-            target_q = rewards + (~dones) * self.DISCOUNT * target_q
+            target_q = rewards + self.DISCOUNT * target_q # (~dones) - nie ppotrzebuje bo to time series
 
         current_q = self.critic(states, actions)
         critic_loss = self.loss_fn(current_q, target_q)
@@ -277,8 +276,14 @@ def train_episode(env,trading_desk, episode, epsilon):
 
 
 #tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+
+tickers =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
+    'META', 'AVGO', 'TSLA', 'JPM',
+    'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
+    'MA', 'XOM', 'JNJ'  
+    ]
 #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
+#tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
 trading_desk = {}
 data = pd.DataFrame()
 min_size = 9999999

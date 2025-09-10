@@ -3,7 +3,13 @@ import numpy as np
 import gym
 from gym import spaces
 import ta 
+import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]  # możesz dodać np. FileHandler
+)
 
 class DifferentialSharpeRatio:
     def __init__(self, eta=0.01):
@@ -106,6 +112,7 @@ class PortfolioEnv(gym.Env):
         asset_values = self.position * last_prices
         total_value = self.cash + np.sum(asset_values)
         portfolio_shares = asset_values / (total_value + 1e-8)   # udział każdego aktywa
+        
         cash_share = self.cash / (total_value + 1e-8)            # udział gotówki
         #portfolio_shares = np.concatenate([portfolio_shares, [cash_share]])
         #print(f"Portfolio shares: {portfolio_shares}")
@@ -124,16 +131,10 @@ class PortfolioEnv(gym.Env):
         curr_prices = self.close_data.iloc[self.current_step].values
         prev_prices = self.close_data.iloc[self.current_step - 1].values
         prev_value = self.cash + np.sum(self.position * prev_prices)
-        transaction_cost_total = 0
 
-        #print(allocation)
-        # if np.any(np.isnan(allocation)) or np.any(allocation < 0) or np.any(allocation > 1):
-        #     return self._get_obs(), -1.0, False, {'error': 'Invalid allocation'}
 
-        MAX_ALLOCATION = 0.3  # 30% maksymalnie dla pojedynczego aktywa
-        #allocation = np.clip(allocation, 0, MAX_ALLOCATION)
+        MAX_ALLOCATION = 0.3  
         
-        current_allocations = []
         for i in range(self.n_assets):
             act = self.trader_action[i]
             alloc = allocation[i]
@@ -147,21 +148,27 @@ class PortfolioEnv(gym.Env):
                 current_allocation = (self.position[i] * price) / prev_value
                 allocation_left = max(0, MAX_ALLOCATION - current_allocation)
 
-                #invest_amount = self.cash * alloc
                 invest_amount = self.cash * allocation_left
                 invest_amount = min(invest_amount + self.transaction_cost, self.cash)
-                #invest_amount = min(allocation_left * prev_value, min(invest_amount, self.cash)) # nie można wydać więcej niż mamy gotówki
-                current_allocations.append(invest_amount / prev_value)
+                shares = np.floor(invest_amount / price)
+                
+                max_shares_to_buy = max(np.floor((self.cash - self.transaction_cost) / price),0)
+                shares = min(shares, max_shares_to_buy)
+                cost = shares * price + self.transaction_cost
+                #cost = min(cost, self.cash)
 
-                cost = invest_amount + self.transaction_cost
-                shares = invest_amount / price
-                cost = min(cost, self.cash)  
+                if shares > 0:
+                    invest_amount = shares * price
+                    self.position[i] += shares
+                    self.cash -= cost
+                    executed = True
+
+                    logging.info(
+                        f"Buying {shares} of asset {self.asset_names[i]} at price {price} "
+                        f"with invest amount {invest_amount} and cost {cost}, cash now {self.cash}"
+                    )      
+              
                 
-                
-                self.position[i] += shares
-                self.cash -= cost
-                transaction_cost_total += self.transaction_cost
-                executed = True
                 
                 # Track buy action
                 self.states_buy[i].append(self.current_step)
@@ -170,12 +177,18 @@ class PortfolioEnv(gym.Env):
                     
             elif act == 2:  # SELL
                 shares_to_sell = self.position[i] * alloc
-                shares_to_sell = min(shares_to_sell, self.position[i])  # nie można sprzedać więcej niż się posiada
-                revenue = shares_to_sell * price
-                self.position[i] -= shares_to_sell
-                self.cash += revenue  # koszt transakcji pomijany przy sprzedaży
-                executed = True
-                    
+                               
+                shares_to_sell = np.floor(min(shares_to_sell, self.position[i]))  # nie można sprzedać więcej niż się posiada
+                if shares_to_sell > 0:
+                    revenue = shares_to_sell * price
+                    self.position[i] -= shares_to_sell
+                    self.cash += revenue  # koszt transakcji pomijany przy sprzedaży
+                    executed = True
+
+                    logging.info(
+                        f"Selling {shares_to_sell} of asset {self.asset_names[i]} at price {price} "
+                        f"with revenue {revenue}, cash now {self.cash}"
+                    )     
                 self.states_sell[i].append(self.current_step)
                 self.shares_sell[i].append(shares_to_sell)
                 self.asset_percentage_sell_history[i].append(shares_to_sell * price / (prev_value + 1e-8))
@@ -192,29 +205,14 @@ class PortfolioEnv(gym.Env):
             self.asset_value_history[i].append(asset_value)
 
 
-        entropy_coeff = 0.2
-        diversity_coeff = 0.2
-        entropy = -np.sum(allocation * np.log(allocation + 1e-8))
-
-        # kara za koncentrację
-        concentration = np.sum(allocation**2)
-        diversity_bonus = 1 - concentration  # 0 → całość w 1 aktywo, max=1 przy równym rozłożeniu
 
         #self.cash_vector = np.full(12, self.initial_cash / 12)
         curr_value = self.cash + np.sum(self.position * curr_prices)
         #curr_value = self.cash_vector + self.position * curr_prices
         self.total_portfolio = curr_value
         portfolio_return = (curr_value - prev_value) / (prev_value + 1e-8)
-
-        entropy_coeff = 0.01
-        entropy = -np.sum(allocation * np.log(allocation + 1e-8) + (1 - allocation) * np.log(1 - allocation + 1e-8))
-        reward = np.dot(allocation, portfolio_return ) #+ entropy_coeff * entropy #+ diversity_coeff * diversity_bonus
-        #reward = np.sum(reward)
-        #reward = portfolio_return
-        #reward = portfolio_return + self.cash_vector
-        reward = np.clip(reward, -1.0, 1.0)
-        #print(reward)
-
+        reward = np.dot(allocation, portfolio_return )
+        
         asset_sharpes = []
         for i in range(self.n_assets):
             if len(self.asset_value_history[i]) > 1:
@@ -232,36 +230,20 @@ class PortfolioEnv(gym.Env):
 
         asset_sharpes = np.array(asset_sharpes)
 
-        # Ważone Sharpe wg allocation (to zachęca do alokowania w aktywa z lepszym profilem ryzyko/zwrot)
-        reward = np.dot(allocation, asset_sharpes)  + entropy_coeff * entropy #portfolio_return
-        #reward = asset_sharpes
-        #print(reward)
-        # Klipowanie
-        
-        portfolio_values = np.array(self.portfolio_value_history)
-
-        if len(portfolio_values) > 1:
-            # log returns albo zwykłe zwroty procentowe
-            portfolio_returns = np.diff(portfolio_values) / (portfolio_values[:-1] + 1e-8)
-
-            if len(portfolio_returns) > 1:
-                mean_r = np.mean(portfolio_returns)
-                std_r = np.std(portfolio_returns) + 1e-8
-                portfolio_sharpe = mean_r / std_r
-            else:
-                portfolio_sharpe = 0.0
+        if len(self.portfolio_value_history) > 1:
+            values = np.array(self.portfolio_value_history)
+            portfolio_returns = np.diff(values) / (values[:-1] + 1e-8)
+            mean_r = np.mean(portfolio_returns)
+            std_r = np.std(portfolio_returns) + 1e-8
+            sharpe_ratio =  mean_r / std_r
         else:
-            portfolio_sharpe = 0.0
-        
+            sharpe_ratio = portfolio_return
+        # Ważone Sharpe wg allocation (to zachęca do alokowania w aktywa z lepszym profilem ryzyko/zwrot)
+        #reward = np.dot(allocation, asset_sharpes) # + entropy_coeff * entropy #portfolio_return        
         
    
-        #print(f"Penalty: {penalty}, Allocation: {allocation}")
-        reward = asset_sharpes# - penalty#* 100 #- penalty
-        #reward = np.dot(allocation, portfolio_sharpe)
-        reward = np.dot(allocation, asset_sharpes) #+ entropy_coeff * entropy #+ diversity_coeff * diversity_bonus
-        reward = portfolio_sharpe #* 100
-        reward = np.clip(reward, -1.0, 1.0) 
-        print(f"Step {self.current_step} | Reward: {reward} | Portfolio Sharpe: {portfolio_sharpe:.4f} | Cash: {self.cash:.2f} | Total val: {curr_value:.2f}")
+        reward = portfolio_return * 100
+        reward = self.dsr.update(portfolio_return) * 100
         
         #print(f"Current step {self.current_step} | Reward {reward} | Allocations {allocation}")
         self.prev_trader_action = self.trader_action.copy()
@@ -269,12 +251,16 @@ class PortfolioEnv(gym.Env):
         self.portfolio_value_history.append(curr_value)
         self.current_step += 1
         done = self.current_step >= len(self.close_data) - 1
-
+        # print(
+        #     f"Step {self.current_step:<6d} | "
+        #     f"Reward: {reward:>10.6f} | "
+        #     f"Cash: {self.cash:>12.2f} | "
+        #     f"Total val: {curr_value:>12.2f}"
+        # )
         info = {
             'portfolio_value': curr_value,
             'cash': self.cash,
             'position': self.position.copy(),
-            'transaction_cost': transaction_cost_total,
             'return': portfolio_return,
             'executed': executed
         }

@@ -267,7 +267,7 @@ def render_portfolio_summary(env, title_suffix=""):
                 if step - env.window_size >= 0 and step - env.window_size < activity_matrix.shape[1]:
                     #print(step,env.asset_percentage_buy_history[i][step])
                     activity_matrix[i, step - env.window_size] = env.asset_percentage_buy_history[i][j]
-                    print(j,step,env.asset_percentage_buy_history[i][j])
+                    #print(j,step,env.asset_percentage_buy_history[i][j])
             for j,step in enumerate(env.states_sell[i]):
                 if step - env.window_size >= 0 and step - env.window_size < activity_matrix.shape[1]:
                     activity_matrix[i, step - env.window_size] = env.asset_percentage_sell_history[i][j] * -1  
