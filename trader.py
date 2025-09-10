@@ -7,18 +7,21 @@ import random
 from collections import deque
 from copy import deepcopy
 from torch.distributions import Categorical
-from tqdm import tqdm
-import pandas as pd
-import matplotlib.pyplot as plt
+import logging
+import os
+
 
 from dataOps import get_training_set_from_IB
 from source.database import upload_stock_data, read_stock_data, upsert_training_logs
 from enviroments import TimeSeriesEnv_simple
 from eval_models import evaluate_steps, render_env
 
-import os
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
-
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]  # możesz dodać FileHandler do pliku
+)
 class DQN(nn.Module):
 	def __init__(self, input_dim, output_dim):
 		super(DQN, self).__init__()
@@ -52,7 +55,6 @@ class DQNAgent:
         self.target_model.load_state_dict(self.model.state_dict())
         self.target_model.eval()
 
-        #self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001, weight_decay=1e-2)
         self.loss_fn = nn.MSELoss()
 
@@ -120,7 +122,7 @@ class DQNAgent:
         qs = self.get_qs(state, target_model)
         action = torch.argmax(qs).item()
         
-        return action #.cpu().numpy()[0]
+        return action
 
     def reset_agent_weights(self):
         self.model = DQN(self.observarion_space, self.action_space).to(self.device)
@@ -141,7 +143,7 @@ class DQNAgent:
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.target_model.load_state_dict(checkpoint['target_model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        print(f"Model załadowany z {self.filename}")
+        logging.info(f"Model załadowany z {self.filename}")
 
 
 def train_episode(agent : DQNAgent,env: TimeSeriesEnv_simple, epsilon):
@@ -151,7 +153,7 @@ def train_episode(agent : DQNAgent,env: TimeSeriesEnv_simple, epsilon):
     current_state = env.reset()
     done = False
     while not done:
-        #print(current_state)
+
         if np.random.random() > epsilon:
             probs = torch.softmax(agent.get_qs(current_state).squeeze(), dim=0)
             dist = Categorical(probs)
@@ -233,18 +235,20 @@ def train_trader(ticker, newData = False):
         if not episode % render_test_every:
             render_env(test_env)
 
-        print(f"Episode: {episode:<5} | "
+        logging.info(
+            f"Episode: {episode:<5} | "
             f"Reward: {reward:<10.4f} | "
             f"Valid Reward: {reward_valid_env:<10.4f} | "
             f"Test Reward: {reward_test_env:<10.4f} | "
             f"Max Reward: {max_reward:<10.4f} | "
-            f"Epsilon: {epsilon:<6.2f}")
+            f"Epsilon: {epsilon:<6.2f}"
+        )
         
         if epsilon < 0.5 and np.mean(evaluate_rewards[-5:]) == reward_valid_env:
             break
         
         if not weight_reset and len(reward_all) >= 5 and np.mean(evaluate_rewards[-5:]) == 0:
-            print('Reseting weights')
+            logging.info('Reseting weights')
             agent.reset_agent_weights()
             weight_reset = True
         
@@ -265,7 +269,8 @@ def trining_retry_loop(ticker, newData=False, num_retries=15):
             np.random.seed(seed)
             torch.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
-            print(f'--------------- Retrying {retry} ---------------')
+            logging.info(f'--------------- Retrying {retry} ---------------')
+
     
     return reward_all, evaluate_rewards, test_rewards
 
@@ -280,6 +285,6 @@ if __name__=="__main__":
     ]
 
     for ticker in tickers:
-        print(f'================ Training {ticker} ================')
+        logging.info(f'================ Training {ticker} ================')
         reward_all, evaluate_rewards, test_rewards = trining_retry_loop(ticker, newData = True)
         training_log_df = upsert_training_logs(reward_all, evaluate_rewards, test_rewards,ticker)

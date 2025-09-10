@@ -40,9 +40,7 @@ class Actor(nn.Module):
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(2 * action_dim + 2 * action_dim, 32),
-            nn.ReLU(),
-            nn.Linear(32, action_dim),        # action_dim = liczba alokacji
+            nn.Linear(2 * action_dim + 2 * action_dim, action_dim),
             nn.Softmax(dim=-1)
         )
 
@@ -68,10 +66,7 @@ class Critic(nn.Module):
         )
         self.fc = nn.Sequential(
             nn.Flatten(),                           
-            nn.Linear(2 * action_dim + 3 * action_dim , 32),      
-            nn.ReLU(),
-            nn.Linear(32, 1),       
-            #nn.Softmax(dim=-1)
+            nn.Linear(2 * action_dim + 3 * action_dim , 1)     
         )
 
     def forward(self, state, action):
@@ -255,7 +250,7 @@ tickers =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
             'MA', 'XOM', 'JNJ'  
     ]
 #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
+#tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
 trading_desk = {}
 data = pd.DataFrame()
 min_size = 9999999
@@ -290,17 +285,17 @@ WINDOW_SIZE = 96
 env = PortfolioEnv(train_data, window_size=WINDOW_SIZE)
 valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE)
 
-print('initilized')
 EPISODES = 50
-
 max_portfolio_manager = None
 max_reward = 0
 evaluate_every = 1
+logging.info(f'Starting training over {EPISODES} episodes, for {env.close_data.shape[1]} tickers, each with {env.close_data.shape[0]} steps, window size {WINDOW_SIZE}')
+
 for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
     reward = train_episode(env,trading_desk, episode,epsilon)
     
     
-    logging.info("Renderuje środowisko walidacyjne")
+    logging.info("Rendering validation environment...")
     valid_env.reset()
     reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env,trading_desk, portfolio_manager)
 

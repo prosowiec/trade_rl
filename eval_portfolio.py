@@ -2,10 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-# import matplotlib
-# matplotlib.use("TkAgg")  # lub "QtAgg", jeśli masz Qt
-# plt.ion()  # interaktywny tryb
-
 def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:0"):
     """
     Evaluate the portfolio environment with separate trader and portfolio manager models
@@ -47,10 +43,7 @@ def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:
         total_reward += reward
         steps += 1
         
-        # Optional: print progress for debugging
-        #if steps % 100 == 0:
-        #    print(f"Step {steps}, Reward: {reward}, Portfolio Value: {info['portfolio_value']}")
-    #print(allocations)
+
     return total_reward, steps, info['portfolio_value']
 
     
