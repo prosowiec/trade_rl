@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim):  # state_dim = [n_assets, features] = [4, 97]
+    def __init__(self, action_dim):  # state_dim = [n_assets, features] = [4, 97]
         super(Actor, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
@@ -56,7 +56,7 @@ class Actor(nn.Module):
         return x
         
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim):
+    def __init__(self, action_dim):
         super(Critic, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
