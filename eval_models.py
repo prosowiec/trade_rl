@@ -9,8 +9,7 @@ def evaluate_steps(env, model, device="cuda:0", OHCL = False):
     steps = 0
     action = 0
     while not done:
-        # konwersja stanu na tensora
-        #state_tensor = torch.tensor(state, dtype=torch.float32, device=device)#.unsqueeze(0)
+
         if not OHCL:
             state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
 
@@ -27,9 +26,7 @@ def evaluate_steps(env, model, device="cuda:0", OHCL = False):
         state, reward, done = env.step(action)
         total_reward += reward
         steps += 1
-        #print(f"Krok: {steps}, Akcja: {action}, Nagroda: {reward:.2f}, Łączny zysk: {env.total_profit:.2f}")
 
-    #print(state_tensor)
     return total_reward
 
 

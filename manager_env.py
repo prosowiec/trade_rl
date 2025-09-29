@@ -134,7 +134,7 @@ class PortfolioEnv(gym.Env):
                     logging.info(
                         f"Buying {shares} of asset {self.asset_names[i]} at price {price} "
                         f"with invest amount {invest_amount} and cost {cost}, cash now {self.cash}"
-                    )      
+                    )
               
                 self.states_buy[i].append(self.current_step)
                 self.shares_buy[i].append(shares)

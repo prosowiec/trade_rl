@@ -22,59 +22,66 @@ logging.basicConfig(
 )
 
 class Actor(nn.Module):
-    def __init__(self,input_dim, action_dim):
+    def __init__(self, state_dim, action_dim):
         super(Actor, self).__init__()
-        self.input_dim = input_dim
-        self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=self.input_dim, out_channels=32, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv1d(32, 2, kernel_size=1),
-            nn.ReLU()
-            
+        self.lstm = nn.LSTM(
+            input_size=action_dim,
+            hidden_size=6,
+            num_layers=1,
+            batch_first=True
         )
+        self.relu = nn.ReLU()
+
         self.fc = nn.Sequential(
-            nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
-            nn.Linear(2 * action_dim + 2 * action_dim, action_dim),
-            nn.Softmax(dim=-1)
+            nn.Flatten(),                     
+            nn.Linear(6 +  2 * action_dim, action_dim),
+            nn.Softmax(dim=-1)               
         )
 
     def forward(self, state):
-        x = state.permute(0, 2, 1)  # [batch, assets, sequence] → [B, sequence, assets]
-        trader_actions = x[:, self.input_dim, :].unsqueeze(1)
-        portfolio_features = x[:, self.input_dim + 1, :].unsqueeze(1)
-        x = x[:, :self.input_dim, :]          # [B, 96, A]
+        #print(state.shape)
+        x = state.permute(0, 2, 1)
+        trader_actions = x[:, 96, :].unsqueeze(1)
+        portfolio_features = x[:, 97, :].unsqueeze(1)
+        x = x[:, :96, :]
 
-        x = self.conv(x)            # [B, 64, 4]
-        x = torch.cat([x, trader_actions, portfolio_features], dim=1)
-        x = self.fc(x)              # [B, 4]
+        out, (h_n, c_n) = self.lstm(x)
+        x = self.relu(out)[:,-1:, :]
+        x = torch.cat([x, trader_actions, portfolio_features], dim=2)
+        x = self.fc(x)
         return x
         
+
 class Critic(nn.Module):
-    def __init__(self,input_dim, action_dim):
+    def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
-        self.input_dim = input_dim
-        self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv1d(32, 2, kernel_size=1),
-            nn.ReLU()
+        self.lstm = nn.LSTM(
+            input_size=action_dim,
+            hidden_size=6,
+            num_layers=1,
+            batch_first=True
         )
+        self.relu = nn.ReLU()
         self.fc = nn.Sequential(
-            nn.Flatten(),                           
-            nn.Linear(2 * action_dim + 3 * action_dim , 1)     
+            nn.Flatten(),                            
+            nn.Linear(6 + 3 * action_dim , 1)
+
         )
 
     def forward(self, state, action):
         x = state.permute(0, 2, 1)               
-        trader_actions = x[:, self.input_dim, :].unsqueeze(1)   
-        portfolio_features = x[:, self.input_dim + 1, :].unsqueeze(1)      
-        x = x[:, :self.input_dim, :]          
+        trader_actions = x[:, 96, :].unsqueeze(1)    
+        portfolio_features = x[:, 97, :].unsqueeze(1) 
+        x = x[:, :96, :]                            
+
         action = action.unsqueeze(1)  
-        x = self.conv(x)                            
-        x = torch.cat([x, action, trader_actions, portfolio_features], dim=1)            
-        x = self.fc(x) 
+
+        out, (h_n, c_n) = self.lstm(x)          
+        x = self.relu(out)[:,-1:, :] 
+        x = torch.cat([x, action, trader_actions, portfolio_features], dim=2)
+        x = self.fc(x)                               
         return x
-    
+
 
 class AgentPortfolio:
     def __init__(self, input_dim=96, action_dim=6):

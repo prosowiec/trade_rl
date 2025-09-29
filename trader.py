@@ -24,29 +24,30 @@ logging.basicConfig(
 )
 
 class DQN(nn.Module):
-	def __init__(self, input_dim, output_dim):
-		super(DQN, self).__init__()
-		self.out_steps = output_dim
+    def __init__(self, input_dim, output_dim):
+        super(DQN, self).__init__()
+        self.out_steps = output_dim
 
-		self.lstm = nn.LSTM(input_size=input_dim, hidden_size=8, batch_first=True)
-		self.dropout = nn.Dropout(p=0.2)
-		self.fc4 = nn.Linear(8, output_dim)
+        self.lstm = nn.LSTM(input_size=input_dim, hidden_size=8, batch_first=True)
+        self.dropout = nn.Dropout(p=0.2)
+        self.relu = nn.ReLU()
+        self.fc4 = nn.Linear(8, output_dim)
 
-	def forward(self, x):
-		#_, (h_n, _) = self.lstm(x)  # h_n: [1, batch, lstm_units]
-		h_n, _ = self.lstm(x) 
-		h_n = h_n.squeeze(0)
-
-		x = self.fc4(h_n)
-		x = x.view(-1, self.out_steps, 1)
-		return x
+    def forward(self, x):
+        #_, (h_n, _) = self.lstm(x)  # h_n: [1, batch, lstm_units]
+        h_n, _ = self.lstm(x) 
+        h_n = h_n.squeeze(0)
+        h_n = self.relu(h_n)
+        x = self.fc4(h_n)
+        x = x.view(-1, self.out_steps, 1)
+        return x
 
 
 class DQNAgent:
     def __init__(self, ticker):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.ticker = ticker
-        self.filename = f'models/{self.ticker}_trader'
+        self.filename = f'models/{self.ticker}_trader_TEST'
 
         self.observarion_space = 96
         self.action_space = 3
@@ -65,7 +66,6 @@ class DQNAgent:
         self.replay_memory = deque(maxlen=self.REPLAY_MEMORY_SIZE)
         self.target_update_counter = 0
         
-        #model setings
         self.UPDATE_TARGET_EVERY = 2
         self.MINIBATCH_SIZE = 128
         self.DISCOUNT = 0.99
@@ -81,7 +81,6 @@ class DQNAgent:
 
         minibatch = random.sample(self.replay_memory, self.MINIBATCH_SIZE)
 
-        # Rozpakowanie danych
         states, actions, rewards, next_states, dones = zip(*minibatch)
 
         states_v = torch.from_numpy(np.array(states)).float().to(self.device)
@@ -206,7 +205,7 @@ def train_trader(ticker, newData = False):
     MIN_EPSILON = 0.01
     EPISODES = 100
 
-    EPSILON_DECAY = (epsilon - MIN_EPSILON) / EPISODES #0.975
+    EPSILON_DECAY = (epsilon - MIN_EPSILON) / EPISODES
 
     render_test_every = 10
     weight_reset = False
@@ -244,7 +243,7 @@ def train_trader(ticker, newData = False):
             f"Max Reward: {max_reward:<10.4f} | "
             f"Epsilon: {epsilon:<6.2f}"
         )
-        
+        # Early stopping - not improving
         if epsilon < 0.5 and np.mean(evaluate_rewards[-5:]) == reward_valid_env:
             break
         
