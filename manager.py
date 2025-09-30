@@ -22,65 +22,59 @@ logging.basicConfig(
 )
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim):
+    def __init__(self,input_dim, action_dim):
         super(Actor, self).__init__()
-        self.lstm = nn.LSTM(
-            input_size=action_dim,
-            hidden_size=6,
-            num_layers=1,
-            batch_first=True
+        self.input_dim = input_dim
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels=self.input_dim, out_channels=32, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv1d(32, 2, kernel_size=1),
+            nn.ReLU()
+            
         )
-        self.relu = nn.ReLU()
-
         self.fc = nn.Sequential(
-            nn.Flatten(),                     
-            nn.Linear(6 +  2 * action_dim, action_dim),
-            nn.Softmax(dim=-1)               
+            nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
+            nn.Linear(2 * action_dim + 2 * action_dim, action_dim),
+            nn.Softmax(dim=1)
         )
 
     def forward(self, state):
-        #print(state.shape)
-        x = state.permute(0, 2, 1)
-        trader_actions = x[:, 96, :].unsqueeze(1)
-        portfolio_features = x[:, 97, :].unsqueeze(1)
-        x = x[:, :96, :]
+        x = state.permute(0, 2, 1)  # [batch, assets, sequence] → [B, sequence, assets]
+        trader_actions = x[:, self.input_dim, :].unsqueeze(1)
+        portfolio_features = x[:, self.input_dim + 1, :].unsqueeze(1)
+        x = x[:, :self.input_dim, :]          # [B, 96, A]
 
-        out, (h_n, c_n) = self.lstm(x)
-        x = self.relu(out)[:,-1:, :]
-        x = torch.cat([x, trader_actions, portfolio_features], dim=2)
-        x = self.fc(x)
+        x = self.conv(x)            # [B, 64, 4]
+        x = torch.cat([x, trader_actions, portfolio_features], dim=1)
+        x = self.fc(x)              # [B, 4]
         return x
         
-
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim):
+    def __init__(self,input_dim, action_dim):
         super(Critic, self).__init__()
-        self.lstm = nn.LSTM(
-            input_size=action_dim,
-            hidden_size=6,
-            num_layers=1,
-            batch_first=True
+        self.input_dim = input_dim
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels=96, out_channels=32, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv1d(32, 2, kernel_size=1),
+            nn.ReLU()
         )
-        self.relu = nn.ReLU()
         self.fc = nn.Sequential(
-            nn.Flatten(),                            
-            nn.Linear(6 + 3 * action_dim , 1)
-
+            nn.Flatten(),                           
+            nn.Linear(2 * action_dim + 3 * action_dim , 1)     
         )
 
     def forward(self, state, action):
         x = state.permute(0, 2, 1)               
-        trader_actions = x[:, 96, :].unsqueeze(1)    
-        portfolio_features = x[:, 97, :].unsqueeze(1) 
-        x = x[:, :96, :]                            
-
+        trader_actions = x[:, self.input_dim, :].unsqueeze(1)   
+        portfolio_features = x[:, self.input_dim + 1, :].unsqueeze(1)      
+        x = x[:, :self.input_dim, :]          
         action = action.unsqueeze(1)  
-
-        out, (h_n, c_n) = self.lstm(x)          
-        x = self.relu(out)[:,-1:, :] 
-        x = torch.cat([x, action, trader_actions, portfolio_features], dim=2)
-        x = self.fc(x)                               
+        x = self.conv(x)                            
+        x = torch.cat([x, action, trader_actions, portfolio_features], dim=1)            
+        x = self.fc(x) 
         return x
+
 
 
 class AgentPortfolio:
@@ -107,6 +101,8 @@ class AgentPortfolio:
         self.TAU = 1e-4
 
         self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.5)
+        
+        self.filename = 'models/portfolio_manager'
 
         
     def update_replay_memory(self, transition):
@@ -167,11 +163,34 @@ class AgentPortfolio:
         return self.noise(action)
     
     def get_action_target(self, state):
-        state = state.clone().detach().float().unsqueeze(0).to(self.device)
+        #state = state.clone().detach().float().unsqueeze(0).to(self.device)
+        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         with torch.no_grad():
             action = self.target_actor(state).cpu().numpy()
 
-        return np.clip(action, 0, 1)
+        return np.clip(action.flatten(), 0, 1)
+    
+    def save_agent(self):
+        torch.save({
+            'target_actor_state_dict': self.target_actor.state_dict(),
+            'target_critic_state_dict': self.target_critic.state_dict(),
+            'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
+            'actor_optimizer_state_dict': self.actor_optimizer.state_dict(),
+        }, self.filename)
+        
+    def load_agent(self):
+        checkpoint = torch.load(
+            self.filename,
+            map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
+
+        self.target_actor.load_state_dict(checkpoint['target_actor_state_dict'])
+        self.target_critic.load_state_dict(checkpoint['target_critic_state_dict'])
+        self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+        self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
+
+        logging.info(f"Agent załadowany z {self.filename}")
+
 
 def train_porfolio_manager(env, trading_desk, episode):
     episode_reward = 0
@@ -204,8 +223,9 @@ def train_porfolio_manager(env, trading_desk, episode):
         current_state = new_state
         step += 1
  
-    if not episode % 1:
-        logging.info(f"Episode: {episode} | Total Reward: {env.total_portfolio:.2f}")
+    portfolio_manager.save_agent()
+    logging.info(f"Saved model | Episode: {episode} | Total Reward: {env.total_portfolio:.2f}")
+    
     
     return episode_reward
 
@@ -213,61 +233,61 @@ def train_porfolio_manager(env, trading_desk, episode):
 
 
 #tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+if __name__ == "__main__":
+    tickers =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
+                'META', 'AVGO', 'TSLA', 'JPM',
+                'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
+                'MA', 'XOM', 'JNJ'  
+        ]
+    #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
+    #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
+    trading_desk = {}
+    data = pd.DataFrame()
+    min_size = 9999999
+    for ticker in tickers:
+        trader = DQNAgent(ticker)
+        trader.load_dqn_agent()
+        
+        train_data, valid_data, test_data = read_stock_data(ticker)
+        training_set = pd.concat([train_data, valid_data, test_data])
 
-tickers =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
-            'META', 'AVGO', 'TSLA', 'JPM',
-            'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
-            'MA', 'XOM', 'JNJ'  
-    ]
-#tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-#tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
-trading_desk = {}
-data = pd.DataFrame()
-min_size = 9999999
-for ticker in tickers:
-    trader = DQNAgent(ticker)
-    trader.load_dqn_agent()
-    
-    train_data, valid_data, test_data = read_stock_data(ticker)
-    training_set = pd.concat([train_data, valid_data, test_data])
+        min_size = min(min_size, len(training_set))
 
-    min_size = min(min_size, len(training_set))
+        temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
 
-    temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
-
-    temp = temp[:min_size].reset_index(drop=True)
-    data = data[:min_size].reset_index(drop=True)    
-    data = pd.concat([data[:min_size], temp[:min_size]], axis=1)
-    trading_desk[ticker] = trader
-    
-reward_all = []
-evaluate_revards = []
-portfolio_manager = AgentPortfolio(input_dim=96, action_dim=len(tickers))
+        temp = temp[:min_size].reset_index(drop=True)
+        data = data[:min_size].reset_index(drop=True)    
+        data = pd.concat([data[:min_size], temp[:min_size]], axis=1)
+        trading_desk[ticker] = trader
+        
+    reward_all = []
+    evaluate_revards = []
+    portfolio_manager = AgentPortfolio(input_dim=96, action_dim=len(tickers))
 
 
-data_split = int(len(data)  * 0.8)
+    data_split = int(len(data)  * 0.8)
 
-train_data = data[:data_split]
-valid_data = data[data_split:]
+    train_data = data[:data_split]
+    valid_data = data[data_split:]
 
-WINDOW_SIZE = 96
-env = PortfolioEnv(train_data, window_size=WINDOW_SIZE)
-valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE)
+    WINDOW_SIZE = 96
+    env = PortfolioEnv(train_data, window_size=WINDOW_SIZE)
+    valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE)
 
-EPISODES = 50
-max_portfolio_manager = None
-max_reward = 0
-evaluate_every = 1
-logging.info(f'Starting training over {EPISODES} episodes, for {env.close_data.shape[1]} tickers, each with {env.close_data.shape[0]} steps, window size {WINDOW_SIZE}')
+    EPISODES = 50
+    max_portfolio_manager = None
+    max_reward = 0
+    evaluate_every = 1
+    logging.info(f'Starting training over {EPISODES} episodes, for {env.close_data.shape[1]} tickers, each with {env.close_data.shape[0]} steps, window size {WINDOW_SIZE}')
 
-for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
-    reward = train_porfolio_manager(env, trading_desk, episode)
-    
-    logging.info("Rendering validation environment...")
-    valid_env.reset()
-    reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env,trading_desk, portfolio_manager)
+    for episode in tqdm(range(1, EPISODES + 1), ascii=True, unit='episodes'):
+        reward = train_porfolio_manager(env, trading_desk, episode)
+        
+        logging.info("Rendering validation environment...")
+        valid_env.reset()
+        reward_valid_dataset, steps, info = evaluate_steps_portfolio(valid_env,trading_desk, portfolio_manager)
 
-    render_portfolio_summary(valid_env)
-    
-    logging.info(f"{info}, sigma noise: {portfolio_manager.noise.sigma}")
-    evaluate_revards.append(info)
+        render_portfolio_summary(valid_env)
+        
+        logging.info(f"{info}, sigma noise: {portfolio_manager.noise.sigma}")
+        evaluate_revards.append(info)

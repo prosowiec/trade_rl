@@ -74,9 +74,9 @@ class PortfolioEnv(gym.Env):
 
         norm_actions = self.trader_action #/ 2.0
         for i in range(self.n_assets):
-            if self.prev_trader_action[i] == 1:
+            if self.trader_action[i] == 1:
                 norm_actions[i] = 1.0 
-            elif self.prev_trader_action[i] == 2:
+            elif self.trader_action[i] == 2:
                 norm_actions[i] = -1.0
             else:
                 norm_actions[i] = 0.0
