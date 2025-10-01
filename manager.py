@@ -35,7 +35,7 @@ class Actor(nn.Module):
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
             nn.Linear(2 * action_dim + 2 * action_dim, action_dim),
-            nn.Softmax(dim=1)
+            nn.Softmax(dim=-1)
         )
 
     def forward(self, state):
