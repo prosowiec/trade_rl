@@ -128,7 +128,7 @@ def main():
                           positions[i], 0.3, 1, key)
 
         # 15 minut = 900 sekund
-        time.sleep(15 * 60)
+        time.sleep(60 * 15)
 
 if __name__ == "__main__":
     main()

@@ -35,7 +35,8 @@ class Actor(nn.Module):
         self.fc = nn.Sequential(
             nn.Flatten(),                     # [B, 64, 4] → [B, 64*4]
             nn.Linear(2 * action_dim + 2 * action_dim, action_dim),
-            nn.Softmax(dim=-1)
+            nn.ReLU()
+            #nn.Softmax(dim=-1)
         )
 
     def forward(self, state):
@@ -102,7 +103,7 @@ class AgentPortfolio:
 
         self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.5)
         
-        self.filename = 'models/portfolio_manager'
+        self.filename = 'models/portfolio_manager_penny'
 
         
     def update_replay_memory(self, transition):
@@ -239,6 +240,19 @@ if __name__ == "__main__":
                 'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
                 'MA', 'XOM', 'JNJ'  
         ]
+    tickers = [
+        "WVE",   # Wave Life Sciences Ltd :contentReference[oaicite:0]{index=0}
+        "ATUS",  # Altice USA Inc :contentReference[oaicite:1]{index=1}
+        "CIFR",  # Cipher Mining Inc :contentReference[oaicite:2]{index=2}
+        "LAZR",  # Luminar Technologies Inc :contentReference[oaicite:3]{index=3}
+        "AAOI",  # Applied Optoelectronics Inc :contentReference[oaicite:4]{index=4}
+        "IREN",  # Iris Energy Ltd :contentReference[oaicite:5]{index=5}
+        "EXK",   # Endeavour Silver Corp :contentReference[oaicite:6]{index=6}
+        "LAC",   # Lithium Americas Corp Newco :contentReference[oaicite:7]{index=7}
+        "CTMX",  # Cytomx Therapeutics Inc :contentReference[oaicite:8]{index=8}
+        "NB"     # Niocorp Developments Ltd :contentReference[oaicite:9]{index=9}
+    ]
+
     #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
     #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
     trading_desk = {}
@@ -271,8 +285,8 @@ if __name__ == "__main__":
     valid_data = data[data_split:]
 
     WINDOW_SIZE = 96
-    env = PortfolioEnv(train_data, window_size=WINDOW_SIZE)
-    valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE)
+    env = PortfolioEnv(train_data, window_size=WINDOW_SIZE, max_allocation=.5)
+    valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE, max_allocation=.5)
 
     EPISODES = 50
     max_portfolio_manager = None
