@@ -101,9 +101,9 @@ class AgentPortfolio:
         self.DISCOUNT = 0.9995
         self.TAU = 1e-4
 
-        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.5)
+        self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.4)
         
-        self.filename = 'models/portfolio_manager_penny'
+        self.filename = 'models/portfolio_manager_penny_new'
 
         
     def update_replay_memory(self, transition):

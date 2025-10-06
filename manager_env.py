@@ -116,7 +116,8 @@ class PortfolioEnv(gym.Env):
 
                 current_allocation = (self.position[i] * price) / prev_value
                 allocation_left = max(0, self.max_allocation - current_allocation)
-
+                allocation_left = min(allocation_left, alloc)
+                
                 invest_amount = self.cash * allocation_left
                 invest_amount = min(invest_amount + self.transaction_cost, self.cash)
                 shares = np.floor(invest_amount / price)
@@ -132,8 +133,8 @@ class PortfolioEnv(gym.Env):
                     executed = True
 
                     logging.info(
-                        f"Buying {shares} of asset {self.asset_names[i]} at price {price} "
-                        f"with invest amount {invest_amount} and cost {cost}, cash now {self.cash}"
+                        f"Buying {shares} of asset {self.asset_names[i]} at price {price:.2f} "
+                        f"with invest amount {invest_amount:.2f} and cost {cost:.2f}, cash now {self.cash:.2f}, allocation {allocation_left:.3f}"
                     )
               
                 self.states_buy[i].append(self.current_step)
@@ -151,9 +152,9 @@ class PortfolioEnv(gym.Env):
                     executed = True
 
                     logging.info(
-                        f"Selling {shares_to_sell} of asset {self.asset_names[i]} at price {price} "
-                        f"with revenue {revenue}, cash now {self.cash}"
-                    )     
+                        f"Selling {shares_to_sell} of asset {self.asset_names[i]} at price {price:.2f} "
+                        f"with revenue {revenue:.2f}, cash now {self.cash:.2f}, allocation {alloc:.2f}"
+                    )                
                 self.states_sell[i].append(self.current_step)
                 self.shares_sell[i].append(shares_to_sell)
                 self.asset_percentage_sell_history[i].append(shares_to_sell * price / (prev_value + 1e-8))

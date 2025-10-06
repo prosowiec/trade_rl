@@ -31,6 +31,7 @@ def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position,
     if action == 1:  # BUY
         current_allocation = (position * price) / prev_value
         allocation_left = max(0, max_allocation - current_allocation)
+        allocation_left = min(allocation_left, alloc)
 
         invest_amount = cash * allocation_left
         invest_amount = min(invest_amount + transaction_cost, cash)
@@ -65,11 +66,18 @@ def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position,
 
 
 def main():
-    tickers =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
-                'META', 'AVGO', 'TSLA', 'JPM',
-                'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
-                'MA', 'XOM', 'JNJ'  
-        ]
+    tickers = [
+        "WVE",   # Wave Life Sciences Ltd :contentReference[oaicite:0]{index=0}
+        "ATUS",  # Altice USA Inc :contentReference[oaicite:1]{index=1}
+        "CIFR",  # Cipher Mining Inc :contentReference[oaicite:2]{index=2}
+        "LAZR",  # Luminar Technologies Inc :contentReference[oaicite:3]{index=3}
+        "AAOI",  # Applied Optoelectronics Inc :contentReference[oaicite:4]{index=4}
+        "IREN",  # Iris Energy Ltd :contentReference[oaicite:5]{index=5}
+        "EXK",   # Endeavour Silver Corp :contentReference[oaicite:6]{index=6}
+        "LAC",   # Lithium Americas Corp Newco :contentReference[oaicite:7]{index=7}
+        "CTMX",  # Cytomx Therapeutics Inc :contentReference[oaicite:8]{index=8}
+        "NB"     # Niocorp Developments Ltd :contentReference[oaicite:9]{index=9}
+    ]
     trading_desk = get_trading_desk(tickers)
     
     logging.info("Loaded trading desk with agents for tickers: " + ", ".join(tickers))
@@ -125,7 +133,7 @@ def main():
             # cash = account['AvailableFunds']
 
             execute_trade(app, traders_actions[i], action_allocation_percentages[i], current_price, float(current_value), float(cash), 
-                          positions[i], 0.3, 1, key)
+                          positions[i], 0.5, 1, key)
 
         # 15 minut = 900 sekund
         time.sleep(60 * 15)
