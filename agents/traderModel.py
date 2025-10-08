@@ -128,3 +128,14 @@ class DQNAgent:
         self.target_model.load_state_dict(checkpoint['target_model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         logging.info(f"Model załadowany z {self.filename}")
+
+
+def get_trading_desk(tickers):
+    trading_desk = {}
+    for ticker in tickers:
+        trader = DQNAgent(ticker)
+        trader.load_dqn_agent()
+        
+        trading_desk[ticker] = trader
+
+    return trading_desk

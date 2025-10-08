@@ -4,27 +4,17 @@ import numpy as np
 from source.IB_connector import retrieve_positions, retrieve_account_and_portfolio, IBapi
 import threading
 import random
-from agents.traderModel import DQNAgent
+from agents.traderModel import get_trading_desk
 from manager_training import AgentPortfolio
-from agent_env.manager_env import PortfolioEnv
 from source.dataOps import get_recent_data, get_observation
 from tickers import Tickers
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()]
 )
 
-
-def get_trading_desk(tickers):
-    trading_desk = {}
-    for ticker in tickers:
-        trader = DQNAgent(ticker)
-        trader.load_dqn_agent()
-        
-        trading_desk[ticker] = trader
-
-    return trading_desk
 
 
 def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position, max_allocation, transaction_cost, asset_name):
@@ -52,7 +42,7 @@ def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position,
 
 
     elif action == 2:  # SELL
-        shares_to_sell = np.floor(min(position * alloc, position))
+        shares_to_sell =position# np.floor(min(position * alloc, position))
         if shares_to_sell > 0:
             revenue = shares_to_sell * price
             position -= shares_to_sell

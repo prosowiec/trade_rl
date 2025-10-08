@@ -65,7 +65,8 @@ if __name__ == "__main__":
     for ticker in tickers:
         trader = DQNAgent(ticker)
         trader.load_dqn_agent()
-        
+        trading_desk[ticker] = trader
+
         train_data, valid_data, test_data = read_stock_data(ticker)
         training_set = pd.concat([train_data, valid_data, test_data])
 
@@ -76,7 +77,6 @@ if __name__ == "__main__":
         temp = temp[:min_size].reset_index(drop=True)
         data = data[:min_size].reset_index(drop=True)    
         data = pd.concat([data[:min_size], temp[:min_size]], axis=1)
-        trading_desk[ticker] = trader
         
     reward_all = []
     evaluate_revards = []

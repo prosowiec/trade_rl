@@ -1,6 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+from source.database import read_stock_data
+import pandas as pd
+from agent_env.manager_env import PortfolioEnv
+from agents.managerModel import AgentPortfolio
+from eval.streamlit_graphs import render_portfolio_summary_streamlit
 
 def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:0"):
     """
@@ -39,6 +44,33 @@ def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:
         
 
     return total_reward, steps, info['portfolio_value']
+
+def evaluate_porfolio_steps_for_UI(trading_desk : dict, window_size = 96, device="cuda:0", OHCL = False):
+    tickers = list(trading_desk.keys())
+    min_size = 9999999
+    data = pd.DataFrame()
+    for ticker in tickers:
+        train_data, valid_data, test_data = read_stock_data(ticker)
+        training_set = pd.concat([train_data, valid_data, test_data])
+
+        min_size = min(min_size, len(training_set))
+
+        temp = pd.DataFrame(training_set['close'].copy()).rename(columns={'close': ticker})
+
+        temp = temp[:min_size].reset_index(drop=True)
+        data = data[:min_size].reset_index(drop=True)    
+        data = pd.concat([data[:min_size], temp[:min_size]], axis=1)
+        
+    portfolio_manager = AgentPortfolio(input_dim=window_size, action_dim=len(tickers))
+    data_split = int(len(data)  * 0.8)
+    train_data = data[:data_split]
+    valid_data = data[data_split:]
+
+    WINDOW_SIZE = 96
+
+    valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE, max_allocation=.5)
+    evaluate_steps_portfolio(valid_env, trading_desk, portfolio_manager, device="cuda:0")
+    render_portfolio_summary_streamlit(valid_env, title_suffix="(Validation Set)")
 
     
 def render_portfolio_summary(env, title_suffix=""):

@@ -94,6 +94,6 @@ def evaluate_steps_for_UI(ticker, window_size = 96, device="cuda:0", OHCL = Fals
 
     total_reward = evaluate_steps(test_env, trader_model.target_model, device="cuda:0", OHCL = False)
 
-    fig = render_env_streamlit(test_env, title_suffix=f"({ticker})", OHCL=OHCL)
-    return fig
+    render_env_streamlit(test_env, title_suffix=f"({ticker})", OHCL=OHCL)
+    
 
