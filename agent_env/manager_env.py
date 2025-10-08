@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import gym
 from gym import spaces
-from managerReward import DifferentialSharpeRatio
+from agents.managerReward import DifferentialSharpeRatio
 import logging
 
 logging.basicConfig(

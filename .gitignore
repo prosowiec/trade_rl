@@ -3,4 +3,5 @@ LSTM/*
 logs/*
 models/*
 data/*
+toIgnore/*
 .env

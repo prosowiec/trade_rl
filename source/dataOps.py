@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
-from database import read_stock_data
-from IB_connector import retrive_market_data
+from source.IB_connector import retrive_market_data
 
 
 def get_training_set_from_IB(ticker : str) -> pd.DataFrame:

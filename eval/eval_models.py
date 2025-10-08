@@ -4,6 +4,7 @@ import numpy as np
 from agent_env.enviroments import TimeSeriesEnv_simple
 from source.database import read_stock_data
 from agents.traderModel import DQNAgent
+from eval.streamlit_graphs import render_env_streamlit
 
 def evaluate_steps(env, model, device="cuda:0", OHCL = False):
     state = env.reset()
@@ -67,66 +68,6 @@ def render_env(env, title_suffix="", OHCL = False):
     plt.show(block=False)
     plt.pause(0.5)
     
-def render_env_ddpg(env, title_suffix="", OHCL=False, window_size=96):
-    if OHCL:
-        prices = env.ohlc_data[:, 3]
-    else:
-        prices = env.data
-
-    profit = env.total_profit
-
-    # Bezpieczne filtrowanie punktów
-    buy_points = [i for i in env.states_buy if i < len(prices)]
-    sell_points = [i for i in env.states_sell if i < len(prices)]
-    paired_points = zip(buy_points[:len(sell_points)], sell_points)
-
-    profits = []
-    for buy_idx, sell_idx in paired_points:
-        buy_price = prices[buy_idx]
-        sell_price = prices[sell_idx]
-        profit = sell_price - buy_price
-        profits.append(profit)
-
-    realized_profit = sum(profits)
-
-    # Dopasowanie alokacji do dostępnych punktów kupna
-    print(f"Alokacje: {env.allocations}")
-    allocations = np.abs(env.allocations[:len(buy_points)])
-    sizes = [150 * a for a in allocations]  # Skalowanie wielkości markerów
-
-    plt.figure(figsize=(14, 6))
-    plt.plot(prices, label='Cena', linewidth=1.5)
-
-    if buy_points:
-        plt.scatter(
-            buy_points,
-            [prices[i] for i in buy_points],
-            color='green',
-            marker='^',
-            label='Kup',
-            s=sizes
-        )
-
-    if sell_points:
-        plt.scatter(
-            sell_points,
-            [prices[i] for i in sell_points],
-            color='red',
-            marker='v',
-            label='Sprzedaj',
-            s=100
-        )
-
-    plt.title(f'Działania agenta {title_suffix} | Łączny zysk: {env.total_profit:.2f}')
-    plt.axvline(x=window_size, color='red', label='Początek okna czasowego')
-    plt.xlabel('Krok')
-    plt.ylabel('Cena')
-
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show(block=False)
-    plt.pause(0.5)
 
 def render_training(training_log_df):
     plt.figure(figsize=(10, 5))
@@ -156,32 +97,3 @@ def evaluate_steps_for_UI(ticker, window_size = 96, device="cuda:0", OHCL = Fals
     fig = render_env_streamlit(test_env, title_suffix=f"({ticker})", OHCL=OHCL)
     return fig
 
-def render_env_streamlit(env, title_suffix="", OHCL=False):
-    if OHCL:
-        prices = env.ohlc_data[:, 3]  # kolumna 'Close'
-    else:
-        prices = env.data
-
-    buy_points = [i for i in env.states_buy if i < len(prices)]
-    sell_points = [i for i in env.states_sell if i < len(prices)]
-    profit = getattr(env, "total_profit", 0)
-
-    fig, ax = plt.subplots(figsize=(14, 6))
-    ax.plot(prices, label='Cena', linewidth=1.5)
-
-    if buy_points:
-        ax.scatter(buy_points, [prices[i] for i in buy_points],
-                   color='green', marker='^', label='Kup', s=100)
-    if sell_points:
-        ax.scatter(sell_points, [prices[i] for i in sell_points],
-                   color='red', marker='v', label='Sprzedaj', s=100)
-
-    ax.set_title(f'Działania agenta {title_suffix} | Łączny zysk: {profit:.2f}')
-    ax.axvline(x=48, color='red', linestyle='--', label='Początek okna czasowego')
-    ax.set_xlabel('Krok')
-    ax.set_ylabel('Cena')
-    ax.legend()
-    ax.grid(True)
-    fig.tight_layout()
-
-    return fig

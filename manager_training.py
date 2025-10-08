@@ -7,6 +7,7 @@ from agents.managerModel import AgentPortfolio
 from source.database import read_stock_data
 from eval.eval_portfolio import evaluate_steps_portfolio, render_portfolio_summary
 from agent_env.manager_env import PortfolioEnv
+from tickers import Tickers
 import logging
 
 logging.basicConfig(
@@ -56,28 +57,8 @@ def train_porfolio_manager(env, trading_desk, episode):
 
 
 
-#tickers = ['AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
 if __name__ == "__main__":
-    tickers =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
-                'META', 'AVGO', 'TSLA', 'JPM',
-                'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
-                'MA', 'XOM', 'JNJ'  
-        ]
-    tickers = [
-        "WVE",   # Wave Life Sciences Ltd :contentReference[oaicite:0]{index=0}
-        "ATUS",  # Altice USA Inc :contentReference[oaicite:1]{index=1}
-        "CIFR",  # Cipher Mining Inc :contentReference[oaicite:2]{index=2}
-        "LAZR",  # Luminar Technologies Inc :contentReference[oaicite:3]{index=3}
-        "AAOI",  # Applied Optoelectronics Inc :contentReference[oaicite:4]{index=4}
-        "IREN",  # Iris Energy Ltd :contentReference[oaicite:5]{index=5}
-        "EXK",   # Endeavour Silver Corp :contentReference[oaicite:6]{index=6}
-        "LAC",   # Lithium Americas Corp Newco :contentReference[oaicite:7]{index=7}
-        "CTMX",  # Cytomx Therapeutics Inc :contentReference[oaicite:8]{index=8}
-        "NB"     # Niocorp Developments Ltd :contentReference[oaicite:9]{index=9}
-    ]
-
-    #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO",'AAPL','GOOGL', 'CCL', 'NVDA', 'LTC', 'AMZN']
-    #tickers = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
+    tickers = Tickers.TICKERS_penny
     trading_desk = {}
     data = pd.DataFrame()
     min_size = 9999999

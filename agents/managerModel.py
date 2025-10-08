@@ -5,7 +5,7 @@ from collections import deque
 import random
 import numpy as np
 import logging
-from noise import OUNoise
+from agents.noise import OUNoise
 
 class Actor(nn.Module):
     def __init__(self,input_dim, action_dim):

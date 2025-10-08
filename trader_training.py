@@ -13,6 +13,7 @@ from source.dataOps import get_training_set_from_IB
 from source.database import upload_stock_data, read_stock_data, upsert_training_logs
 from agent_env.enviroments import TimeSeriesEnv_simple
 from eval.eval_models import evaluate_steps, render_env
+from tickers import Tickers
 
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
 logging.basicConfig(
@@ -152,24 +153,8 @@ def trining_retry_loop(ticker, newData=False, num_retries=15):
     return reward_all, evaluate_rewards, test_rewards
 
 if __name__=="__main__":
-    # tickers =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
-    #             'META', 'AVGO', 'TSLA', 'JPM',
-    #             'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
-    #             'MA', 'XOM', 'JNJ'  
-    #     ]
-
-    tickers = [
-        "WVE",   # Wave Life Sciences Ltd :contentReference[oaicite:0]{index=0}
-        "ATUS",  # Altice USA Inc :contentReference[oaicite:1]{index=1}
-        "CIFR",  # Cipher Mining Inc :contentReference[oaicite:2]{index=2}
-        "LAZR",  # Luminar Technologies Inc :contentReference[oaicite:3]{index=3}
-        "AAOI",  # Applied Optoelectronics Inc :contentReference[oaicite:4]{index=4}
-        "IREN",  # Iris Energy Ltd :contentReference[oaicite:5]{index=5}
-        "EXK",   # Endeavour Silver Corp :contentReference[oaicite:6]{index=6}
-        "LAC",   # Lithium Americas Corp Newco :contentReference[oaicite:7]{index=7}
-        "CTMX",  # Cytomx Therapeutics Inc :contentReference[oaicite:8]{index=8}
-        "NB"     # Niocorp Developments Ltd :contentReference[oaicite:9]{index=9}
-    ]
+    tickers = Tickers.TICKERS_penny
+    
     for ticker in tickers:
                 logging.info(f'================ Training {ticker} ================')
                 reward_all, evaluate_rewards, test_rewards = trining_retry_loop(ticker, newData = True)
