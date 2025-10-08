@@ -22,7 +22,6 @@ def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:
         #trader_actions = trader.get_action(env.get_price_window(), target_model = True)
         
         action_allocation_percentages = portfolio_manager.get_action_target(state_tensor)
-
         traders_actions = []
         hist_data = env.get_price_window()
         for i,key in enumerate(trading_desk.keys()):

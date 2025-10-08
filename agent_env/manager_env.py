@@ -145,6 +145,7 @@ class PortfolioEnv(gym.Env):
                 shares_to_sell = self.position[i] * alloc
                                
                 shares_to_sell = np.floor(min(shares_to_sell, self.position[i]))  # nie można sprzedać więcej niż się posiada
+                shares_to_sell = self.position[i]
                 if shares_to_sell > 0:
                     revenue = shares_to_sell * price
                     self.position[i] -= shares_to_sell

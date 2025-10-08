@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
+from agent_env.enviroments import TimeSeriesEnv_simple
+from source.database import read_stock_data
+from agents.traderModel import DQNAgent
 
 def evaluate_steps(env, model, device="cuda:0", OHCL = False):
     state = env.reset()
@@ -139,3 +142,46 @@ def render_training(training_log_df):
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+    
+def evaluate_steps_for_UI(ticker, window_size = 96, device="cuda:0", OHCL = False):
+    train_data, valid_data, test_data = read_stock_data(ticker)
+    
+    test_env = TimeSeriesEnv_simple(test_data['close'].values, window_size=window_size)
+
+    trader_model = DQNAgent(ticker)
+    trader_model.load_dqn_agent()
+
+    total_reward = evaluate_steps(test_env, trader_model.target_model, device="cuda:0", OHCL = False)
+
+    fig = render_env_streamlit(test_env, title_suffix=f"({ticker})", OHCL=OHCL)
+    return fig
+
+def render_env_streamlit(env, title_suffix="", OHCL=False):
+    if OHCL:
+        prices = env.ohlc_data[:, 3]  # kolumna 'Close'
+    else:
+        prices = env.data
+
+    buy_points = [i for i in env.states_buy if i < len(prices)]
+    sell_points = [i for i in env.states_sell if i < len(prices)]
+    profit = getattr(env, "total_profit", 0)
+
+    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.plot(prices, label='Cena', linewidth=1.5)
+
+    if buy_points:
+        ax.scatter(buy_points, [prices[i] for i in buy_points],
+                   color='green', marker='^', label='Kup', s=100)
+    if sell_points:
+        ax.scatter(sell_points, [prices[i] for i in sell_points],
+                   color='red', marker='v', label='Sprzedaj', s=100)
+
+    ax.set_title(f'Działania agenta {title_suffix} | Łączny zysk: {profit:.2f}')
+    ax.axvline(x=48, color='red', linestyle='--', label='Początek okna czasowego')
+    ax.set_xlabel('Krok')
+    ax.set_ylabel('Cena')
+    ax.legend()
+    ax.grid(True)
+    fig.tight_layout()
+
+    return fig

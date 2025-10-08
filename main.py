@@ -4,10 +4,10 @@ import numpy as np
 from source.IB_connector import retrieve_positions, retrieve_account_and_portfolio, IBapi
 import threading
 import random
-from trader import DQNAgent
+from agents.traderModel import DQNAgent
 from manager import AgentPortfolio
-from manager_env import PortfolioEnv
-from dataOps import get_recent_data, get_observation
+from agent_env.manager_env import PortfolioEnv
+from source.dataOps import get_recent_data, get_observation
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,8 +45,8 @@ def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position,
             position += shares
             cash -= cost
             logging.info(
-                        f"Buying {shares} of asset {asset_name} at price {price} "
-                        f"with invest amount {invest_amount} and cost {cost}, cash now {cash}"
+                        f"Buying {shares} of asset {asset_name} at price {price:.3f} "
+                        f"with invest amount {invest_amount:.3f}, allocation {allocation_left:.3f} and cost {cost:.3f}, cash now {cash:.3f}"
                     )
             app.buy_market(asset_name, qty=shares)
 
@@ -58,8 +58,8 @@ def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position,
             position -= shares_to_sell
             cash += revenue
             logging.info(
-                        f"Selling {shares_to_sell} of asset {asset_name} at price {price} "
-                        f"with revenue {revenue}, cash now {cash}"
+                        f"Selling {shares_to_sell} of asset {asset_name} at price {price:.3f} "
+                        f"with revenue {revenue:.3f}, cash now {cash:.3f}"
                     )
             app.sell_market(asset_name, qty=shares_to_sell)
     
@@ -112,8 +112,11 @@ def main():
             traders_actions.append(curr_trader.get_action(trader_iput[-WINDOW_SIZE:], target_model = True))
             
             #get current positions
-            ticker_position = portfolio[portfolio['symbol'] == ticker]
-            value = ticker_position['position'].iloc[0] if not ticker_position.empty else 0   
+            if portfolio.empty:
+                value = 0
+            else:
+                ticker_position = portfolio[portfolio['symbol'] == ticker]
+                value = ticker_position['position'].iloc[0] if not ticker_position.empty else 0   
             positions.append(int(value))     
 
 
@@ -121,7 +124,7 @@ def main():
         current_state = get_observation(data[-WINDOW_SIZE:], WINDOW_SIZE, traders_actions, positions, float(cash), len(tickers))
         
         action_allocation_percentages = np.array([portfolio_manager.get_action_target(current_state)]).flatten()
-        
+        #print(action_allocation_percentages)
         # place orders
         for i, key in enumerate(trading_desk.keys()):
             logging.info(f"Trader for {key} action: {traders_actions[i]} | Allocation: {action_allocation_percentages[i]:.3f}")
