@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-from source.database import read_stock_data
+from utils.database import read_stock_data
 import pandas as pd
 from agent_env.manager_env import PortfolioEnv
 from agents.managerModel import AgentPortfolio

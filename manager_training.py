@@ -4,7 +4,7 @@ import pandas as pd
 
 from agents.traderModel import DQNAgent
 from agents.managerModel import AgentPortfolio
-from source.database import read_stock_data
+from utils.database import read_stock_data
 from eval.eval_portfolio import evaluate_steps_portfolio, render_portfolio_summary
 from agent_env.manager_env import PortfolioEnv
 from tickers import Tickers

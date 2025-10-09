@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from agent_env.enviroments import TimeSeriesEnv_simple
-from source.database import read_stock_data
+from utils.database import read_stock_data
 from agents.traderModel import DQNAgent
 from eval.streamlit_graphs import render_env_streamlit
 

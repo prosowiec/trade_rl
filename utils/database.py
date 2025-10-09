@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine,func
 from sqlalchemy.dialects.sqlite import insert  
 from sqlalchemy.orm import declarative_base, sessionmaker
-from source.db_models import Base, StockData, ModelData, TrainingLogs  # Dodaj plik models.py poniżej\
+from utils.db_models import Base, StockData, ModelData, TrainingLogs  # Dodaj plik models.py poniżej\
 import pandas as pd
 import os
 

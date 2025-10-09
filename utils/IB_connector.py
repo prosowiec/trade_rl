@@ -6,7 +6,7 @@ from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ibapi.order import Order
-from source.start_IB import open_ib_con, check_if_app_exist
+from utils.start_IB import open_ib_con, check_if_app_exist
 
 class IBapi(EWrapper, EClient):
     def __init__(self):

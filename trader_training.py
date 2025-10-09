@@ -9,8 +9,8 @@ import os
 from agents.traderModel import DQNAgent
 
 
-from source.dataOps import get_training_set_from_IB
-from source.database import upload_stock_data, read_stock_data, upsert_training_logs
+from utils.dataOps import get_training_set_from_IB
+from utils.database import upload_stock_data, read_stock_data, upsert_training_logs
 from agent_env.enviroments import TimeSeriesEnv_simple
 from eval.eval_models import evaluate_steps, render_env
 from tickers import Tickers

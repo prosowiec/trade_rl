@@ -1,12 +1,12 @@
 import logging
 import time
 import numpy as np
-from source.IB_connector import retrieve_positions, retrieve_account_and_portfolio, IBapi
+from utils.IB_connector import retrieve_positions, retrieve_account_and_portfolio, IBapi
 import threading
 import random
 from agents.traderModel import get_trading_desk
 from manager_training import AgentPortfolio
-from source.dataOps import get_recent_data, get_observation
+from utils.dataOps import get_recent_data, get_observation
 from tickers import Tickers
 
 logging.basicConfig(
