@@ -1,7 +1,8 @@
 from sqlalchemy import create_engine,func
 from sqlalchemy.dialects.sqlite import insert  
 from sqlalchemy.orm import declarative_base, sessionmaker
-from utils.db_models import Base, StockData, ModelData, TrainingLogs  # Dodaj plik models.py poniżej\
+from utils.db_models import Base, StockData, Trade, TrainingLogs 
+import datetime
 import pandas as pd
 import os
 
@@ -91,3 +92,37 @@ def upsert_training_logs(reward_all, evaluate_rewards, test_rewards,ticker, db=S
     db.commit()    
     
     return training_log_df
+
+def save_trade_to_db(action_data):
+    """
+    Zapisuje pojedynczy rekord transakcji do bazy danych.
+    """
+    session = SessionLocal()
+    try:
+        trade = Trade(
+            action=action_data["action"],
+            allocation=action_data["allocation"],
+            price=action_data["price"],
+            position=action_data["position"],
+            asset_name=action_data["asset_name"],
+            executed=action_data["executed"],
+            timestamp=datetime.datetime.strptime(action_data["timestamp"], "%Y-%m-%d %H:%M:%S")
+        )
+        session.add(trade)
+        session.commit()
+    finally:
+        session.close()
+        
+def load_trades_from_db(asset_name=None):
+    """
+    Zwraca listę transakcji (opcjonalnie filtrowaną po nazwie aktywa).
+    """
+    session = SessionLocal()
+    try:
+        query = session.query(Trade)
+        if asset_name:
+            query = query.filter(Trade.asset_name == asset_name)
+        trades = query.order_by(Trade.timestamp.desc()).all()
+        return trades
+    finally:
+        session.close()

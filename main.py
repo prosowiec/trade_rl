@@ -1,12 +1,13 @@
 import logging
 import time
 import numpy as np
-from utils.IB_connector import retrieve_positions, retrieve_account_and_portfolio, IBapi
 import threading
 import random
 from agents.traderModel import get_trading_desk
 from manager_training import AgentPortfolio
 from utils.dataOps import get_recent_data, get_observation
+from utils.IB_connector import retrieve_positions, retrieve_account_and_portfolio, IBapi
+from utils.database import save_trade_to_db
 from tickers import Tickers
 
 logging.basicConfig(
@@ -18,6 +19,8 @@ logging.basicConfig(
 
 
 def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position, max_allocation, transaction_cost, asset_name):
+    execute_trade = False
+    shares = 0
     if action == 1:  # BUY
         current_allocation = (position * price) / prev_value
         allocation_left = max(0, max_allocation - current_allocation)
@@ -39,20 +42,34 @@ def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position,
                         f"with invest amount {invest_amount:.3f}, allocation {allocation_left:.3f} and cost {cost:.3f}, cash now {cash:.3f}"
                     )
             app.buy_market(asset_name, qty=shares)
+            alloc = allocation_left
+            execute_trade = True
 
 
     elif action == 2:  # SELL
-        shares_to_sell =position# np.floor(min(position * alloc, position))
-        if shares_to_sell > 0:
-            revenue = shares_to_sell * price
-            position -= shares_to_sell
+        shares = position # np.floor(min(position * alloc, position))
+        if shares > 0:
+            revenue = shares * price
+            position -= shares
             cash += revenue
             logging.info(
-                        f"Selling {shares_to_sell} of asset {asset_name} at price {price:.3f} "
+                        f"Selling {shares} of asset {asset_name} at price {price:.3f} "
                         f"with revenue {revenue:.3f}, cash now {cash:.3f}"
                     )
-            app.sell_market(asset_name, qty=shares_to_sell)
+            app.sell_market(asset_name, qty=shares)
+            alloc = 1
+            execute_trade = True
     
+    
+    return {
+        "action": "BUY" if action == 1 else "SELL" if action == 2 else "HOLD",
+        "allocation": alloc,
+        "price": price,
+        "position": shares,
+        "asset_name": asset_name,
+        "executed" : execute_trade,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
 
 
 def main():
@@ -99,23 +116,18 @@ def main():
             positions.append(int(value))     
 
 
-        # get portfolio manager action
         current_state = get_observation(data[-WINDOW_SIZE:], WINDOW_SIZE, traders_actions, positions, float(cash), len(tickers))
         
         action_allocation_percentages = np.array([portfolio_manager.get_action_target(current_state)]).flatten()
-        #print(action_allocation_percentages)
-        # place orders
+
         for i, key in enumerate(trading_desk.keys()):
             logging.info(f"Trader for {key} action: {traders_actions[i]} | Allocation: {action_allocation_percentages[i]:.3f}")
             current_price = data[key].values[-1]
             
-            # #get funds from 
-            # portfolio, account = retrieve_account_and_portfolio(app)
-            # current_value = account['NetLiquidation']
-            # cash = account['AvailableFunds']
-
-            execute_trade(app, traders_actions[i], action_allocation_percentages[i], current_price, float(current_value), float(cash), 
+            trade_data = execute_trade(app, traders_actions[i], action_allocation_percentages[i], current_price, float(current_value), float(cash), 
                           positions[i], 0.5, 1, key)
+            
+            save_trade_to_db(trade_data)
 
         # 15 minut = 900 sekund
         time.sleep(60 * 15)

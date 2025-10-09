@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, Float, String
+from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime
 from sqlalchemy.ext.declarative import declarative_base
+import datetime
 
 Base = declarative_base()
 
@@ -32,3 +33,15 @@ class TrainingLogs(Base):
     testRewards = Column(Float)
     ticker = Column(String)
     episode = Column(Integer)
+
+class Trade(Base):
+    __tablename__ = "trades"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String, nullable=False)           # BUY / SELL / HOLD
+    allocation = Column(Float, nullable=False)
+    price = Column(Float, nullable=False)
+    position = Column(Float, nullable=False)
+    asset_name = Column(String, nullable=False)
+    executed = Column(Boolean, default=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
