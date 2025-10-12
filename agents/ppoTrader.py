@@ -54,7 +54,7 @@ class TraderPPO:
         self.lam = 0.95
         self.clip_eps = 0.2
         self.value_coef = 0.5
-        self.entropy_coef = 0.0001
+        self.entropy_coef = 0.01
         self.epochs = 10
         self.MINIBATCH_SIZE = 128
         self.max_grad_norm = 0.5
@@ -94,19 +94,29 @@ class TraderPPO:
         self.replay_memory.append((state, action, reward, done, logp, value))
         
     def compute_gae(self, rewards, dones, values, last_value=0.0):
-        advs, returns = [], []
-        gae = 0
-        values = torch.cat([values, torch.tensor([last_value], device=self.device)])
+        advs = []
+        returns = []
+        gae = 0.0
+        
+        # Append last_value for bootstrapping
+        values_list = values.tolist() + [last_value]
+        
         for t in reversed(range(len(rewards))):
-            delta = rewards[t] + self.gamma * values[t + 1] * (1 - dones[t]) - values[t]
+            next_value = values_list[t + 1]
+            current_value = values_list[t]
+            
+            delta = rewards[t] + self.gamma * next_value * (1 - dones[t]) - current_value
             gae = delta + self.gamma * self.lam * (1 - dones[t]) * gae
+            
             advs.insert(0, gae)
-            returns.insert(0, gae + values[t])
+            returns.insert(0, gae + current_value)
+        
         advs = torch.tensor(advs, dtype=torch.float32, device=self.device)
         returns = torch.tensor(returns, dtype=torch.float32, device=self.device)
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
+        
         return advs, returns
-
+    
     def train(self):
         states, actions, rewards, dones, old_logps, values = zip(*self.replay_memory)
         states = torch.tensor(np.array(states, dtype=np.float32), device=self.device)
