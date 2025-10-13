@@ -31,7 +31,7 @@ class DQNAgent:
     def __init__(self, ticker):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.ticker = ticker
-        self.filename = f'models/{self.ticker}_trader'
+        self.filename = f'models/{self.ticker}_traderLS'
 
         self.observarion_space = 96
         self.action_space = 3
