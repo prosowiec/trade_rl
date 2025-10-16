@@ -3,7 +3,6 @@ from eval.eval_models import evaluate_steps_for_UI
 from agents.traderModel import get_trading_desk
 from eval.eval_portfolio import evaluate_porfolio_steps_for_UI
 from utils.database import load_trades_from_db
-import datetime as dt
 import pandas as pd
 from tickers import Tickers
 
