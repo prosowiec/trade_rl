@@ -32,7 +32,7 @@ if view_option == "📊 Portfolio":
 
     with st.spinner("Obliczanie wyników portfela..."):
         trading_desk = get_trading_desk(ticker_list)
-        evaluate_porfolio_steps_for_UI(trading_desk, window_size=96, device="cuda:0", OHCL=False)
+        evaluate_porfolio_steps_for_UI(trading_desk, window_size=96)
     
     st.success("✅ Portfel został przetworzony.")
     st.markdown("---")
@@ -43,7 +43,7 @@ elif view_option == "🤖 Traderzy indywidualni":
         st.markdown(f"### 🤖 Agent dla {ticker}")
         with st.spinner(f"Symulacja dla {ticker}..."):
             print(f"Evaluating for {ticker}")
-            evaluate_steps_for_UI(ticker, window_size=96, device="cuda:0", OHCL=False)
+            evaluate_steps_for_UI(ticker, window_size=96, OHCL=False)
         st.success("✅ Analiza zakończona pomyślnie.")
 
 

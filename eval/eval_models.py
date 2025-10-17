@@ -6,7 +6,8 @@ from utils.database import read_stock_data
 from agents.traderModel import DQNAgent
 from eval.streamlit_graphs import render_env_streamlit
 
-def evaluate_steps(env, model, device="cuda:0", OHCL = False):
+def evaluate_steps(env, model, OHCL = False):
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
     state = env.reset()
     total_reward = 0
     done = False
@@ -84,7 +85,7 @@ def render_training(training_log_df):
     plt.tight_layout()
     plt.show()
     
-def evaluate_steps_for_UI(ticker, window_size = 96, device="cuda:0", OHCL = False):
+def evaluate_steps_for_UI(ticker, window_size = 96,  OHCL = False):
     train_data, valid_data, test_data = read_stock_data(ticker)
     
     test_env = TimeSeriesEnv_simple(test_data['close'].values, window_size=window_size)
@@ -92,7 +93,7 @@ def evaluate_steps_for_UI(ticker, window_size = 96, device="cuda:0", OHCL = Fals
     trader_model = DQNAgent(ticker)
     trader_model.load_dqn_agent()
 
-    total_reward = evaluate_steps(test_env, trader_model.target_model, device="cuda:0", OHCL = False)
+    total_reward = evaluate_steps(test_env, trader_model.target_model, OHCL = False)
 
     render_env_streamlit(test_env, title_suffix=f"({ticker})", OHCL=OHCL)
     

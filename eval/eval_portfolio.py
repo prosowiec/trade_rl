@@ -7,7 +7,7 @@ from agent_env.manager_env import PortfolioEnv
 from agents.managerModel import AgentPortfolio
 from eval.streamlit_graphs import render_portfolio_summary_streamlit
 
-def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:0"):
+def evaluate_steps_portfolio(env, trading_desk, portfolio_manager):
     """
     Evaluate the portfolio environment with separate trader and portfolio manager models
     
@@ -17,6 +17,7 @@ def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:
         portfolio_model: Model that outputs allocation percentages
         device: Device to run models on
     """
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
     state = env.reset()
     total_reward = 0
     done = False
@@ -45,7 +46,7 @@ def evaluate_steps_portfolio(env, trading_desk, portfolio_manager, device="cuda:
 
     return total_reward, steps, info['portfolio_value']
 
-def evaluate_porfolio_steps_for_UI(trading_desk : dict, window_size = 96, device="cuda:0", OHCL = False):
+def evaluate_porfolio_steps_for_UI(trading_desk : dict, window_size = 96):
     tickers = list(trading_desk.keys())
     min_size = 9999999
     data = pd.DataFrame()
@@ -69,7 +70,7 @@ def evaluate_porfolio_steps_for_UI(trading_desk : dict, window_size = 96, device
     WINDOW_SIZE = 96
 
     valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE, max_allocation=.5)
-    evaluate_steps_portfolio(valid_env, trading_desk, portfolio_manager, device="cuda:0")
+    evaluate_steps_portfolio(valid_env, trading_desk, portfolio_manager)
     render_portfolio_summary_streamlit(valid_env, title_suffix="(Validation Set)")
 
     

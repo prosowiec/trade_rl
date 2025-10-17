@@ -55,6 +55,7 @@ def train_episode(agent : DQNAgent,env: TimeSeriesEnv_simple, epsilon):
 
 def prepare_environments(ticker, newData = False, window_size=96):
     if newData:
+        # TODO: pass IB api instance
         training_set = get_training_set_from_IB(ticker)
         upload_stock_data(training_set)
         

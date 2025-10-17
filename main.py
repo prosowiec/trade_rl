@@ -9,12 +9,35 @@ from utils.dataOps import get_recent_data, get_observation
 from utils.IB_connector import retrieve_positions, retrieve_account_and_portfolio, IBapi
 from utils.database import save_trade_to_db
 from tickers import Tickers
+import sys
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()]
 )
+
+class NoSendingIBMessagesFilter(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        return not (
+            "SENDING placeOrder" in msg or
+            "SENDING reqHistoricalData" in msg or
+            "ANSWER updateAccountTime" in msg 
+        )
+
+logger = logging.getLogger()
+logger.addFilter(NoSendingIBMessagesFilter())
+
+ib_loggers = [
+    logging.getLogger("ibapi"),
+    logging.getLogger("ibapi.client"),
+    logging.getLogger("ibapi.wrapper"),
+    logging.getLogger("ibapi.connection"),
+]
+
+for ib_logger in ib_loggers:
+    ib_logger.addFilter(NoSendingIBMessagesFilter())
 
 
 
@@ -72,7 +95,7 @@ def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position,
     }
 
 
-def main():
+def main(app : IBapi):
     tickers = Tickers().TICKERS_penny
     trading_desk = get_trading_desk(tickers)
     
@@ -81,19 +104,11 @@ def main():
     portfolio_manager.load_agent()
     logging.info("Loaded portfolio manager agent.")
     
-    app = IBapi()
-    app.connect("127.0.0.1", 7497, clientId=random.randint(1, 9999))
-
-    api_thread = threading.Thread(target=app.run, daemon=True)
-    api_thread.start()
-
-    time.sleep(1)
-
     
     WINDOW_SIZE = 96
 
     while True:
-        data = get_recent_data(tickers)        
+        data = get_recent_data(app,tickers)        
         positions = retrieve_positions(app)
         portfolio, account = retrieve_account_and_portfolio(app)
         current_value = float(account['NetLiquidation'])
@@ -133,4 +148,26 @@ def main():
         time.sleep(60 * 15)
 
 if __name__ == "__main__":
-    main()
+    app = IBapi()
+    app.connect("127.0.0.1", 4002, clientId=random.randint(1, 9999)) #7497
+
+    api_thread = threading.Thread(target=app.run, daemon=True)
+    api_thread.start()
+
+    time.sleep(2)
+
+    try:
+        main(app)
+    except Exception as e:
+        logging.exception(f"Error in main(): {e}")
+
+    finally:
+        # --- Bezpieczne zakończenie ---
+        logging.info("Ending connection with IB brokest...")
+        try:
+            app.disconnect()
+        except Exception as e:
+            logging.warning(f"Failed to end connection with IB: {e}")
+
+        logging.info("Program end.")
+        sys.exit(0)
