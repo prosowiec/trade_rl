@@ -4,7 +4,22 @@ from agents.traderModel import get_trading_desk
 from eval.eval_portfolio import evaluate_porfolio_steps_for_UI
 from utils.database import load_trades_from_db
 import pandas as pd
+import plotly.express as px
 from tickers import Tickers
+import threading
+from utils.IB_connector import retrieve_account_and_portfolio, IBapi
+
+def get_portfolio_info(host="ib-gateway", port=4004, client_id=1):
+    app = IBapi()
+    app.connect(host, port, client_id)
+
+    thread = threading.Thread(target=app.run, daemon=True)
+    thread.start()
+
+    portfolio_df, account_series = retrieve_account_and_portfolio(app)
+
+    app.disconnect()
+    return portfolio_df, account_series
 
 st.set_page_config(page_title="AI Trading Dashboard", layout="wide", page_icon="💹")
 
@@ -21,7 +36,7 @@ ticker_list = tickers.TICKERS_penny
 st.sidebar.header("📂 Wybierz widok")
 view_option = st.sidebar.radio(
     "Tryb widoku:",
-    ["📊 Portfolio", "🤖 Traderzy indywidualni", "📅 Historia transakcji"]
+    ["📅 Historia transakcji","📊 Portfolio", "🤖 Traderzy indywidualni",]
 )
 
 st.sidebar.markdown("---")
@@ -48,12 +63,50 @@ elif view_option == "🤖 Traderzy indywidualni":
 
 
 elif view_option == "📅 Historia transakcji":
+    
     st.subheader("📅 Historia transakcji (Timeline)")
     if st.button("🔄 Odśwież dane"):
         st.cache_data.clear()
         st.toast("Dane zostały odświeżone!", icon="🔁")
         
     trades = load_trades_from_db()
+    portfolio_df, account_series = get_portfolio_info()
+    if not portfolio_df.empty:
+        st.subheader("📈 Portfolio:")
+        st.dataframe(
+            portfolio_df[[
+                "symbol", "position", "avgCost", "marketPrice",
+                "marketValue", "unrealizedPNL", "realizedPNL"
+            ]].sort_values("marketValue", ascending=False),
+            use_container_width=True,
+        )
+        st.write(f"Łączna wartość portfela: ${account_series['NetLiquidation']}")
+        # --- WYKRES KOŁOWY ---
+        st.subheader("🥧 Struktura portfela (według wartości rynkowej)")
+        try:
+            pie_df = (
+                portfolio_df.groupby("symbol")["marketValue"]
+                .sum()
+                .reset_index()
+                .sort_values("marketValue", ascending=False)
+            )
+
+            fig = px.pie(
+                pie_df,
+                names="symbol",
+                values="marketValue",
+                title="Udział aktywów w portfelu",
+                hole=0.3,
+            )
+            fig.update_traces(textinfo="percent+label", pull=[0.05]*len(pie_df))
+            st.plotly_chart(fig, use_container_width=True)
+            
+        except Exception as e:
+            st.error(f"Błąd przy tworzeniu wykresu: {e}")
+            
+        if not account_series.empty:
+            st.subheader("💰 Wartości konta:")
+            st.write(account_series)
 
     if not trades:
         st.warning("Brak zapisanych transakcji w bazie danych.")
@@ -64,7 +117,7 @@ elif view_option == "📅 Historia transakcji":
             ts = (
                 t.timestamp.strftime("%Y-%m-%d %H:%M")
                 if hasattr(t.timestamp, "strftime")
-                else str(t.timestamp)
+                else str(t.timestamp)[:16]
             )
             data.append({
                 "id": t.id,
@@ -79,11 +132,14 @@ elif view_option == "📅 Historia transakcji":
 
         df = pd.DataFrame(data)
 
-        # Bierzemy np. 10 ostatnich decyzji dla każdego aktywa
+        # 🔧 KONWERSJA na datetime (tu jest klucz!)
+        df["timestamp"] = pd.to_datetime(df["timestamp"], format="%Y-%m-%d %H:%M", errors="coerce")
+
+        # ✅ Teraz sortowanie po dacie działa poprawnie
         df_sorted = df.sort_values(["asset_name", "timestamp"], ascending=[True, True])
         latest_actions = (
             df_sorted.groupby("asset_name")
-            .head(10)
+            .tail(10)  # tail zamiast head, żeby brać najnowsze
             .reset_index(drop=True)
         )
 
@@ -91,7 +147,6 @@ elif view_option == "📅 Historia transakcji":
         matrix = latest_actions.pivot_table(
             index="asset_name", columns="timestamp", values="action", aggfunc="last"
         )
-
         # --- Kolorowanie macierzy ---
         def color_action(val):
             if val == "BUY":
@@ -112,32 +167,6 @@ elif view_option == "📅 Historia transakcji":
 
         st.markdown("🟩 BUY &nbsp;&nbsp; 🟥 SELL &nbsp;&nbsp; 🟨 HOLD")
         st.markdown("---")
-
-        st.subheader("🔍 Szczegóły transakcji")
-
-        # Interaktywny wybór transakcji
-        selected = st.data_editor(
-            df.sort_values("timestamp", ascending=False),
-            hide_index=True,
-            height=400,
-            use_container_width=True,
-            key="trade_selector",
-        )
-
-        # Użytkownik może zaznaczyć wiersz (np. poprzez checkbox)
-        selected_rows = selected[selected.get("action").notna()]
-
-        if not selected_rows.empty:
-            selected_trade = selected_rows.iloc[0]  # bierzemy pierwszy zaznaczony
-            st.markdown(f"### 💬 Szczegóły dla transakcji {selected_trade['id']}")
-            st.write(f"**Aktywo:** {selected_trade['asset_name']}")
-            st.write(f"**Akcja:** {selected_trade['action']}")
-            st.write(f"**Cena:** {selected_trade['price']}")
-            st.write(f"**Pozycja:** {selected_trade['position']}")
-            st.write(f"**Alokacja:** {selected_trade['allocation']}")
-            st.write(f"**Wykonano:** {selected_trade['executed']}")
-            st.write(f"**Czas:** {selected_trade['timestamp']}")
-
         
         
 #https://ui.shadcn.com/

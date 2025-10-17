@@ -29,9 +29,7 @@ class IBapi(EWrapper, EClient):
         self.open_orders = {}
 
     def historicalData(self, reqId, bar):
-        ticker = self.reqId_to_ticker[reqId]  # Pobieramy ticker po reqId
-        #print(f"Date: {bar.date}, Open: {bar.open}, High: {bar.high}, Low: {bar.low}, Close: {bar.close}")
-        #self.data.append([bar.date, bar.open, bar.high, bar.low, bar.close, bar.volume])
+        ticker = self.reqId_to_ticker[reqId]
         self.data[ticker].append([bar.date, bar.open, bar.high, bar.low, bar.close, bar.volume])
         
     def get_data_df(self) -> pd.DataFrame:
@@ -122,6 +120,9 @@ class IBapi(EWrapper, EClient):
         order.action = action
         order.totalQuantity = quantity
         order.orderType = order_type
+        order.eTradeOnly = False
+        order.firmQuoteOnly = False
+
         if order_type == "LMT":
             if limit_price is None:
                 raise ValueError("limit_price required for LMT orders")
@@ -167,7 +168,6 @@ class IBapi(EWrapper, EClient):
         c = self.create_contract(symbol)
         order = self._create_order("SELL", qty, order_type="LMT", limit_price=price)
         return self.place_order(c, order)
-
     
     def get_batch_market_data(self, tickers,duration = "3 M", time_interval = "30 mins", sleep_time=5):
         for i, ticker in enumerate(tickers):
@@ -190,50 +190,17 @@ class IBapi(EWrapper, EClient):
     
 
 def retrive_market_data(app : IBapi, tickers= ["AAPL", "MSFT", "TSLA"], duration = "3 M", time_interval = "30 mins", sleep_time=5):
-    # app = IBapi()
-    # app.connect("127.0.0.1", 4002, clientId=random.randint(1, 9999))
-
-    # # Wątek obsługujący API
-    # api_thread = threading.Thread(target=app.run, daemon=True)
-    # api_thread.start()
-
-    # time.sleep(1)
     app.get_batch_market_data(tickers, duration = duration, time_interval =time_interval, sleep_time=sleep_time)
-
     dfs = app.get_data_df()
-
-    # app.disconnect()
-
     return dfs
 
 def retrieve_positions(app : IBapi): # 7497
-    # app = IBapi()
-    # app.connect("127.0.0.1", 4002, clientId=random.randint(1, 9999))
-
-    # api_thread = threading.Thread(target=app.run, daemon=True)
-    # api_thread.start()
-
-    # time.sleep(1)  # daj IB czas na inicjalizację
     app.reqPositions()
-
-    # czekamy aż callback positionEnd() ustawi event
     app.positions_ready.wait(timeout=5)
-    #app.disconnect()
-    
-
     return pd.DataFrame(app.positions)
 
 def retrieve_account_and_portfolio(app : IBapi, account=""):  
-    # app = IBapi()
-    # app.connect("127.0.0.1", 4002, clientId=random.randint(1, 9999))
-
-    # api_thread = threading.Thread(target=app.run, daemon=True)
-    # api_thread.start()
-
-    # time.sleep(1)
     app.reqAccountUpdates(True, account)
 
     app.portfolio_ready.wait(timeout=5)
-    # app.disconnect()
-
     return pd.DataFrame(app.portfolio), pd.Series(app.account_values)

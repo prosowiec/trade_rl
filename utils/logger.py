@@ -12,7 +12,8 @@ class NoSendingIBMessagesFilter(logging.Filter):
         return not (
             "SENDING placeOrder" in msg or
             "SENDING reqHistoricalData" in msg or
-            "ANSWER updateAccountTime" in msg 
+            "ANSWER updateAccountTime" in msg or
+            "ANSWER commissionReport" in msg
         )
         
 def start_logger():
