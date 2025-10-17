@@ -11,4 +11,4 @@ COPY . .
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "dashboard.py"]
+CMD ["bash", "-c", "python main.py & streamlit run dashboard.py"]
