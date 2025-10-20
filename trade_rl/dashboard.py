@@ -1,12 +1,12 @@
 import streamlit as st
-from trade_rl.eval.eval_models import evaluate_steps_for_UI
-from trade_rl.agents.traderModel import get_trading_desk
-from trade_rl.eval.eval_portfolio import evaluate_porfolio_steps_for_UI
-from trade_rl.utils.database import load_trades_from_db
-from trade_rl.utils.IB_connector import retrieve_account_and_portfolio, IBapi
+from eval.eval_models import evaluate_steps_for_UI
+from agents.traderModel import get_trading_desk
+from eval.eval_portfolio import evaluate_porfolio_steps_for_UI
+from utils.database import load_trades_from_db
+from utils.IB_connector import retrieve_account_and_portfolio, IBapi
 import pandas as pd
 import plotly.express as px
-from trade_rl.tickers import Tickers
+from tickers import Tickers
 import threading
 
 def get_portfolio_info(host="ib-gateway", port=4004, client_id=1):
