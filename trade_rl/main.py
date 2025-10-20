@@ -27,7 +27,7 @@ def trading_job(app, trading_desk, portfolio_manager, WINDOW_SIZE):
         portfolio, account = retrieve_account_and_portfolio(app)
         current_value = float(account['NetLiquidation'])
         cash = float(account['AvailableFunds'])
-
+        app.cancel_all_open_orders()
         traders_actions = []
         positions = []
         for i, ticker in enumerate(tickers):

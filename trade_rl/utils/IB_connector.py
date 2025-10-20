@@ -147,6 +147,21 @@ class IBapi(EWrapper, EClient):
 
         self.placeOrder(oid, contract, order)
         return oid
+    
+    def cancel_all_open_orders(self):
+        """Anuluje wszystkie otwarte (niezrealizowane) zlecenia."""
+        # Żądanie listy otwartych zleceń
+        self.reqOpenOrders()
+        time.sleep(1)  # chwila na otrzymanie callbacków openOrder
+
+        if not self.open_orders:
+            print("Brak otwartych zleceń do anulowania.")
+            return
+
+        for orderId in list(self.open_orders.keys()):
+            print(f"Anuluję zlecenie {orderId}")
+            self.cancelOrder(orderId)
+        self.open_orders.clear()
 
     # krótsze wrappery:
     def buy_market(self, symbol: str, qty: float):

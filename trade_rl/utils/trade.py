@@ -6,7 +6,7 @@ from utils.IB_connector import IBapi
 
 def execute_trade(app : IBapi, action, alloc, price, prev_value, cash, position, max_allocation, transaction_cost, asset_name):
     execute_trade = False
-    shares = 0
+    shares = 0    
     if action == 1:  # BUY
         current_allocation = (position * price) / prev_value
         allocation_left = max(0, max_allocation - current_allocation)
