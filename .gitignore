@@ -1,7 +1,9 @@
 test/*
 LSTM/*
 logs/*
-models/*
+trade_rl/models/*
+trade_rl/__pycache__
 data/*
 toIgnore/*
+__pycache__/*
 .env
