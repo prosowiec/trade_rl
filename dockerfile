@@ -11,4 +11,4 @@ COPY . .
 
 EXPOSE 8501
 
-CMD ["bash", "-c", "python trade_rl/main.py & streamlit run trade_rl/dashboard.py"]
+CMD ["bash", "-c", "python trade_rl/main.py --dashboard & streamlit run trade_rl/dashboard.py"]

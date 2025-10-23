@@ -219,3 +219,15 @@ def retrieve_account_and_portfolio(app : IBapi, account=""):
 
     app.portfolio_ready.wait(timeout=5)
     return pd.DataFrame(app.portfolio), pd.Series(app.account_values)
+
+def get_portfolio_info(host="ib-gateway", port=4004, client_id=1):
+    app = IBapi()
+    app.connect(host, port, client_id)
+
+    thread = threading.Thread(target=app.run, daemon=True)
+    thread.start()
+
+    portfolio_df, account_series = retrieve_account_and_portfolio(app)
+
+    app.disconnect()
+    return portfolio_df, account_series

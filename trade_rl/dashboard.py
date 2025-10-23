@@ -2,50 +2,15 @@ import streamlit as st
 from eval.eval_models import evaluate_steps_for_UI
 from agents.traderModel import get_trading_desk
 from eval.eval_portfolio import evaluate_porfolio_steps_for_UI
-from utils.database import load_trades_from_db, get_tickers_group, set_group_state, init_db
-from utils.IB_connector import retrieve_account_and_portfolio, IBapi
+from utils.database import load_trades_from_db, get_tickers_group, set_group_state, get_active_tickers
+from utils.IB_connector import get_portfolio_info
+from utils.process_managment import find_process, stop_main, start_main, restart
+
 import pandas as pd
 import plotly.express as px
 from tickers import Tickers
-import threading
-import psutil
-import os
-import subprocess
-import sys
-import time
 
 SCRIPT_NAME = "trade_rl/main.py"
-
-
-def find_process(script_name):
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-        try:
-            if (
-                proc.info['name']
-                and proc.info['name'].startswith("python")
-                and len(proc.info['cmdline']) > 1
-                and script_name in proc.info['cmdline'][1]
-                and proc.pid != os.getpid()
-            ):
-                return proc
-        except (TypeError):
-            continue
-    return None
-
-
-def start_main(script_name):
-    subprocess.Popen([sys.executable, script_name])
-    time.sleep(1)
-
-
-def stop_main(proc):
-    """Zatrzymuje proces main.py."""
-    proc.terminate()
-    try:
-        proc.wait(timeout=5)
-    except psutil.TimeoutExpired:
-        proc.kill()
-
 
 # --- UI Streamlit ---
 st.set_page_config(page_title="Sterowanie main.py", page_icon="⚙️", layout="centered")
@@ -66,18 +31,6 @@ else:
         st.success("Uruchomiono `main.py`.")
         st.rerun()    
     
-def get_portfolio_info(host="ib-gateway", port=4004, client_id=1):
-    app = IBapi()
-    app.connect(host, port, client_id)
-
-    thread = threading.Thread(target=app.run, daemon=True)
-    thread.start()
-
-    portfolio_df, account_series = retrieve_account_and_portfolio(app)
-
-    app.disconnect()
-    return portfolio_df, account_series
-
 st.set_page_config(page_title="AI Trading Dashboard", layout="wide", page_icon="💹")
 
 st.title("💹 AI Trading Dashboard")
@@ -90,28 +43,25 @@ tickers = Tickers()
 ticker_list = tickers.TICKERS_penny
 
 
-tickers_data = get_tickers_group()
+groups_data = get_tickers_group()
+active_tickers  = get_active_tickers()
 
-# --- wyświetlenie tabeli ---
-st.sidebar.subheader("📋 Wszystkie tickery w bazie danych")
-#st.dataframe(tickers_data, use_container_width=True)
-# --- wybór grupy do aktywacji ---
-groups = sorted(list({row["Group"] for row in tickers_data}))
-selected_group = st.sidebar.selectbox("Wybierz grupę do aktywacji:", groups)
+active_group = [row["Group"] for row in groups_data if row["Active"]][0] if len(active_tickers) > 0 else None
+if active_tickers:
+    st.sidebar.info(f"🟢 Aktualnie aktywa grupa {active_group}, aktywa: **{', '.join(active_tickers)}**")
+else:
+    st.sidebar.warning("⚪ Brak aktywnej grupy.")
+    
+groups = sorted(list({row["Group"] for row in groups_data}))
+selected_group = st.sidebar.selectbox("Wybierz grupę do aktywacji:", groups, index=groups.index(active_group) if active_group in groups else 0)
 
-# --- przycisk do ustawienia aktywnej grupy ---
 if st.sidebar.button("🔄 Ustaw jako aktywną grupę"):
     set_group_state(selected_group)
     st.sidebar.success(f"✅ Grupa **{selected_group}** została ustawiona jako aktywna.")
-    st.experimental_rerun()  # odśwież stronę po zmianie
+    restart(SCRIPT_NAME)
+    st.rerun()  # odśwież stronę po zmianie
 
-# --- pokazanie aktywnej grupy ---
-active_groups = [row["Ticker"] for row in tickers_data if row["Active"]]
-group = [row["Group"] for row in tickers_data if row["Active"]].pop() if len(active_groups) > 0 else None
-if active_groups:
-    st.sidebar.info(f"🟢 Aktualnie aktywa grupa {group}, aktywa: **{', '.join(active_groups)}**")
-else:
-    st.sidebar.warning("⚪ Brak aktywnej grupy.")
+
 
 st.sidebar.header("📂 Wybierz widok")
 view_option = st.sidebar.radio(

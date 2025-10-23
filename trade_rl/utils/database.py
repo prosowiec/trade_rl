@@ -150,13 +150,10 @@ def set_group_state(tickers_group: str, db=SessionLocal()):
     db.commit()
     
 def get_tickers_group(db=SessionLocal()):
-    with SessionLocal() as db:
-        records = db.query(TickersList).all()
-        data = [
+    records = db.query(TickersList.group_name,TickersList.active ).distinct().all()
+    data = [
             {
-                "ID": r.id,
                 "Group": r.group_name,
-                "Ticker": r.ticker,
                 "Active": r.active,
             }
             for r in records

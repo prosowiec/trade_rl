@@ -9,11 +9,12 @@ from manager_training import AgentPortfolio
 from utils.trade import execute_trade
 from utils.dataOps import get_recent_data, get_observation
 from utils.IB_connector import retrieve_positions, retrieve_account_and_portfolio, IBapi
-from utils.database import save_trade_to_db
+from utils.database import save_trade_to_db, get_active_tickers
 from tickers import Tickers
 import logging
 from utils.logger import start_logger
 import sys
+import argparse
 
 start_logger()
 
@@ -64,8 +65,9 @@ def main(app: IBapi, tickers_group = 'PENNY', dashboard_enabled = False):
     if not dashboard_enabled:
         tickers = Tickers().get_tickers(tickers_group)
     else:
-        ...
-        
+        tickers = get_active_tickers()
+
+    logging.info("Active tickers for trading: " + ", ".join(tickers))
     trading_desk = get_trading_desk(tickers)
     
     logging.info("Loaded trading desk with agents for tickers: " + ", ".join(tickers))
@@ -107,6 +109,10 @@ def main(app: IBapi, tickers_group = 'PENNY', dashboard_enabled = False):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dashboard", action="store_true", help="Enable dashboard mode")
+    args = parser.parse_args()
+    
     time.sleep(5)
     app = IBapi()
     logging.info("=" * 60)
@@ -119,7 +125,7 @@ if __name__ == "__main__":
     time.sleep(2)
 
     try:
-        main(app)
+        main(app, dashboard_enabled=args.dashboard)
     except Exception as e:
         logging.exception(f"Error in main(): {e}")
 
