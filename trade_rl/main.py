@@ -60,12 +60,16 @@ def trading_job(app, trading_desk, portfolio_manager, WINDOW_SIZE):
         logging.exception(f"Error in trading_job: {e}")
 
 
-def main(app: IBapi):
-    tickers = Tickers().TICKERS_penny
+def main(app: IBapi, tickers_group = 'PENNY', dashboard_enabled = False):
+    if not dashboard_enabled:
+        tickers = Tickers().get_tickers(tickers_group)
+    else:
+        ...
+        
     trading_desk = get_trading_desk(tickers)
     
     logging.info("Loaded trading desk with agents for tickers: " + ", ".join(tickers))
-    portfolio_manager = AgentPortfolio(input_dim=96, action_dim=len(tickers))
+    portfolio_manager = AgentPortfolio(tickers, input_dim=96, action_dim=len(tickers))
     portfolio_manager.load_agent()
     logging.info("Loaded portfolio manager agent.")
     

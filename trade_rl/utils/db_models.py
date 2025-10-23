@@ -52,3 +52,4 @@ class TickersList(Base):
     id = Column(Integer, primary_key=True, index=True)
     group_name = Column(String, index=True)
     ticker = Column(String, unique=True, index=True)
+    active = Column(Boolean, default=True)

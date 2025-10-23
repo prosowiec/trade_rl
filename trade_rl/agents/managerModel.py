@@ -66,7 +66,7 @@ class Critic(nn.Module):
 
 
 class AgentPortfolio:
-    def __init__(self, input_dim=96, action_dim=6):
+    def __init__(self, ticker_list : list, input_dim=96, action_dim=6):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.actor = Actor(input_dim, action_dim).to(self.device)
@@ -89,8 +89,8 @@ class AgentPortfolio:
         self.TAU = 1e-4
 
         self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.4)
-        
-        self.filename = 'trade_rl/models/portfolio_manager_penny_new'
+        ticker_list = "_".join(ticker_list)
+        self.filename = 'trade_rl/models/portfolio_manager_' + ticker_list
 
         
     def update_replay_memory(self, transition):

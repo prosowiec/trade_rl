@@ -22,8 +22,18 @@ class Tickers:
         
         self.TRASH_TICKERS = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
 
+        self.groups ={
+            'PENNY': self.TICKERS_penny,
+            'BIG': self.BIG_TICKERS,
+            'TRASH': self.TRASH_TICKERS
+        }
+            
     def get_current_tickers(self):
         return self.TICKERS_penny
+    
+    def get_tickers(self, group_name = 'TICKERS_penny'):
+        
+        return self.groups[group_name]
 
 if __name__ == "__main__":
     pass

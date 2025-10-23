@@ -2,13 +2,70 @@ import streamlit as st
 from eval.eval_models import evaluate_steps_for_UI
 from agents.traderModel import get_trading_desk
 from eval.eval_portfolio import evaluate_porfolio_steps_for_UI
-from utils.database import load_trades_from_db
+from utils.database import load_trades_from_db, get_tickers_group, set_group_state, init_db
 from utils.IB_connector import retrieve_account_and_portfolio, IBapi
 import pandas as pd
 import plotly.express as px
 from tickers import Tickers
 import threading
+import psutil
+import os
+import subprocess
+import sys
+import time
 
+SCRIPT_NAME = "trade_rl/main.py"
+
+
+def find_process(script_name):
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            if (
+                proc.info['name']
+                and proc.info['name'].startswith("python")
+                and len(proc.info['cmdline']) > 1
+                and script_name in proc.info['cmdline'][1]
+                and proc.pid != os.getpid()
+            ):
+                return proc
+        except (TypeError):
+            continue
+    return None
+
+
+def start_main(script_name):
+    subprocess.Popen([sys.executable, script_name])
+    time.sleep(1)
+
+
+def stop_main(proc):
+    """Zatrzymuje proces main.py."""
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except psutil.TimeoutExpired:
+        proc.kill()
+
+
+# --- UI Streamlit ---
+st.set_page_config(page_title="Sterowanie main.py", page_icon="⚙️", layout="centered")
+st.title("⚙️ Sterowanie aplikacją `main.py`")
+
+proc = find_process(SCRIPT_NAME)
+
+if proc:
+    st.success(f"`{SCRIPT_NAME}` jest uruchomiony (PID {proc.pid}).")
+    if st.button("🟥 Zatrzymaj main.py"):
+        stop_main(proc)
+        st.warning("Zatrzymano `main.py`.")
+        st.rerun()
+else:
+    st.warning(f"`{SCRIPT_NAME}` nie działa.")
+    if st.button("🟩 Uruchom main.py"):
+        start_main(SCRIPT_NAME)
+        st.success("Uruchomiono `main.py`.")
+        st.rerun()    
+    
 def get_portfolio_info(host="ib-gateway", port=4004, client_id=1):
     app = IBapi()
     app.connect(host, port, client_id)
@@ -32,6 +89,29 @@ tickers = Tickers()
 # Możesz tu dodać np. rozwijane menu z kategoriami aktywów
 ticker_list = tickers.TICKERS_penny
 
+
+tickers_data = get_tickers_group()
+
+# --- wyświetlenie tabeli ---
+st.sidebar.subheader("📋 Wszystkie tickery w bazie danych")
+#st.dataframe(tickers_data, use_container_width=True)
+# --- wybór grupy do aktywacji ---
+groups = sorted(list({row["Group"] for row in tickers_data}))
+selected_group = st.sidebar.selectbox("Wybierz grupę do aktywacji:", groups)
+
+# --- przycisk do ustawienia aktywnej grupy ---
+if st.sidebar.button("🔄 Ustaw jako aktywną grupę"):
+    set_group_state(selected_group)
+    st.sidebar.success(f"✅ Grupa **{selected_group}** została ustawiona jako aktywna.")
+    st.experimental_rerun()  # odśwież stronę po zmianie
+
+# --- pokazanie aktywnej grupy ---
+active_groups = [row["Ticker"] for row in tickers_data if row["Active"]]
+group = [row["Group"] for row in tickers_data if row["Active"]].pop() if len(active_groups) > 0 else None
+if active_groups:
+    st.sidebar.info(f"🟢 Aktualnie aktywa grupa {group}, aktywa: **{', '.join(active_groups)}**")
+else:
+    st.sidebar.warning("⚪ Brak aktywnej grupy.")
 
 st.sidebar.header("📂 Wybierz widok")
 view_option = st.sidebar.radio(

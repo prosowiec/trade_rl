@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine,func
 from sqlalchemy.dialects.sqlite import insert  
 from sqlalchemy.orm import sessionmaker
-from utils.db_models import Base, StockData, Trade, TrainingLogs 
+from utils.db_models import Base, StockData, Trade, TrainingLogs, TickersList
 import datetime
 import pandas as pd
 import os
@@ -126,5 +126,43 @@ def load_trades_from_db(asset_name=None):
     finally:
         session.close()
         
+def get_active_tickers(db=SessionLocal()):
+    """
+    Zwraca listę aktywnych tickerów z bazy danych.
+    """
+    records = db.query(TickersList).filter(TickersList.active == True).all()
+    tickers = [record.ticker for record in records]
+    return tickers
+
+def set_group_state(tickers_group: str, db=SessionLocal()):
+    """
+    Ustawia active=True dla wszystkich tickerów z danej grupy,
+    a active=False dla pozostałych.
+    """
+    # dezaktywuj wszystkie grupy
+    db.query(TickersList).update({TickersList.active: False})
+
+    # aktywuj wybraną grupę
+    db.query(TickersList).filter(TickersList.group_name == tickers_group).update(
+        {TickersList.active: True}
+    )
+
+    db.commit()
+    
+def get_tickers_group(db=SessionLocal()):
+    with SessionLocal() as db:
+        records = db.query(TickersList).all()
+        data = [
+            {
+                "ID": r.id,
+                "Group": r.group_name,
+                "Ticker": r.ticker,
+                "Active": r.active,
+            }
+            for r in records
+        ]
+    return data
+
+
 if __name__ == "__main__":
     init_db()

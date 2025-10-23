@@ -80,7 +80,7 @@ if __name__ == "__main__":
         
     reward_all = []
     evaluate_revards = []
-    portfolio_manager = AgentPortfolio(input_dim=96, action_dim=len(tickers))
+    portfolio_manager = AgentPortfolio(tickers, input_dim=96, action_dim=len(tickers))
 
 
     data_split = int(len(data)  * 0.8)
