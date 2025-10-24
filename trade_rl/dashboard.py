@@ -36,11 +36,10 @@ st.set_page_config(page_title="AI Trading Dashboard", layout="wide", page_icon="
 st.title("💹 AI Trading Dashboard")
 st.markdown("### Monitorowanie wyników agentów i portfela")
 
+# tickers = Tickers()
 
-tickers = Tickers()
-
-# Możesz tu dodać np. rozwijane menu z kategoriami aktywów
-ticker_list = tickers.TICKERS_penny
+# # Możesz tu dodać np. rozwijane menu z kategoriami aktywów
+# ticker_list = tickers.TICKERS_penny
 
 
 groups_data = get_tickers_group()
@@ -76,7 +75,7 @@ if view_option == "📊 Portfolio":
     st.subheader("🧺 Podsumowanie portfela")
 
     with st.spinner("Obliczanie wyników portfela..."):
-        trading_desk = get_trading_desk(ticker_list)
+        trading_desk = get_trading_desk(active_tickers)
         evaluate_porfolio_steps_for_UI(trading_desk, window_size=96)
     
     st.success("✅ Portfel został przetworzony.")
@@ -84,7 +83,7 @@ if view_option == "📊 Portfolio":
 
 elif view_option == "🤖 Traderzy indywidualni":
     st.subheader("📈 Wyniki indywidualnych agentów")
-    for ticker in ticker_list:
+    for ticker in active_tickers:
         st.markdown(f"### 🤖 Agent dla {ticker}")
         with st.spinner(f"Symulacja dla {ticker}..."):
             print(f"Evaluating for {ticker}")
@@ -98,9 +97,11 @@ elif view_option == "📅 Historia transakcji":
     if st.button("🔄 Odśwież dane"):
         st.cache_data.clear()
         st.toast("Dane zostały odświeżone!", icon="🔁")
-        
+    
     trades = load_trades_from_db()
-    portfolio_df, account_series = get_portfolio_info()
+    portfolio_df, account_series, positions = get_portfolio_info()
+    st.write(positions)
+
     if not portfolio_df.empty:
         st.subheader("📈 Portfolio:")
         st.dataframe(

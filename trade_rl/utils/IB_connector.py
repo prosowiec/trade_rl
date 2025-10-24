@@ -228,6 +228,8 @@ def get_portfolio_info(host="ib-gateway", port=4004, client_id=1):
     thread.start()
 
     portfolio_df, account_series = retrieve_account_and_portfolio(app)
+    positions = retrieve_positions(app)
+
 
     app.disconnect()
-    return portfolio_df, account_series
+    return portfolio_df, account_series , positions

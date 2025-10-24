@@ -38,6 +38,8 @@ def train_porfolio_manager(env, trading_desk, episode):
             'trader' : traders_actions,
             'portfolio_manager': np.array([action_allocation_percentages]).flatten()
         }
+        if not env.current_step % 500:
+            print(np.array([action_allocation_percentages]).flatten())
         new_state, reward, done, info = env.step(action)
         episode_reward += reward
         
@@ -58,7 +60,7 @@ def train_porfolio_manager(env, trading_desk, episode):
 
 
 if __name__ == "__main__":
-    tickers = Tickers().TICKERS_penny
+    tickers = Tickers().BIG_TICKERS
     trading_desk = {}
     data = pd.DataFrame()
     min_size = 9999999

@@ -21,14 +21,16 @@ start_logger()
 def trading_job(app, trading_desk, portfolio_manager, WINDOW_SIZE):
     """The actual trading logic - called by scheduler"""
     try:
+        app.cancel_all_open_orders()
+        time.sleep(2)
+
         tickers = list(trading_desk.keys())
         
         data = get_recent_data(app, tickers)        
-        positions = retrieve_positions(app)
+        positions_ib = retrieve_positions(app)
         portfolio, account = retrieve_account_and_portfolio(app)
         current_value = float(account['NetLiquidation'])
         cash = float(account['AvailableFunds'])
-        app.cancel_all_open_orders()
         traders_actions = []
         positions = []
         for i, ticker in enumerate(tickers):
@@ -39,8 +41,9 @@ def trading_job(app, trading_desk, portfolio_manager, WINDOW_SIZE):
             if portfolio.empty:
                 value = 0
             else:
-                ticker_position = portfolio[portfolio['symbol'] == ticker]
-                value = ticker_position['position'].iloc[0] if not ticker_position.empty else 0   
+                ticker_position = positions_ib[positions_ib['symbol'] == ticker]
+                value = ticker_position['position'].iloc[0] if not ticker_position.empty else 0
+                
             positions.append(int(value))     
 
         current_state = get_observation(data[-WINDOW_SIZE:], WINDOW_SIZE, traders_actions, positions, float(cash), len(tickers))
@@ -56,6 +59,7 @@ def trading_job(app, trading_desk, portfolio_manager, WINDOW_SIZE):
             save_trade_to_db(trade_data)
             
         logging.info("Trading job completed successfully")
+        del positions
         
     except Exception as e:
         logging.exception(f"Error in trading_job: {e}")

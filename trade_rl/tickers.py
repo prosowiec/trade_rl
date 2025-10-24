@@ -14,11 +14,7 @@ class Tickers:
             "NB"     # Niocorp Developments Ltd :contentReference[oaicite:9]{index=9}
         ]
 
-        self.BIG_TICKERS =  ['NVDA', 'MSFT', 'AAPL', 'GOOG', 'AMZN',
-                'META', 'AVGO', 'TSLA', 'JPM',
-                'WMT', 'V', 'ORCL', 'LLY', 'NFLX',
-                'MA', 'XOM', 'JNJ'  
-        ]
+        self.BIG_TICKERS =  ['NVDA','META','AVGO','WMT','V','NFLX','XOM','JNJ']
         
         self.TRASH_TICKERS = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
 

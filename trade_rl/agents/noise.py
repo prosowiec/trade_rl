@@ -25,11 +25,11 @@ class OUNoise:
         self.state = x + dx
         if self.sigma > self.min_sigma:
             self.sigma *= self.sigma_decay
-
+            self.sigma = max(self.min_sigma, self.sigma_decay)
         return self.state
     
     def __call__(self, action):
         """Call to sample noise."""
         res = action.flatten() + self.sample()
-        res = res / res.sum()
+        #res = res / res.sum()
         return np.clip(res,0,1)
