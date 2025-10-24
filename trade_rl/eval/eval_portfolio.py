@@ -5,7 +5,7 @@ from utils.database import read_stock_data
 import pandas as pd
 from agent_env.manager_env import PortfolioEnv
 from agents.managerModel import AgentPortfolio
-from eval.streamlit_graphs import render_portfolio_summary_streamlit
+from dashboardViews.streamlit_graphs import render_portfolio_summary_streamlit
 
 def evaluate_steps_portfolio(env, trading_desk, portfolio_manager):
     """
