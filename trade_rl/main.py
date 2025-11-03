@@ -52,7 +52,7 @@ def trading_job(app, trading_desk, portfolio_manager, WINDOW_SIZE):
         for i, key in enumerate(tickers):
             logging.info(f"Trader for {key} action: {traders_actions[i]} | Allocation: {action_allocation_percentages[i]:.3f}")
             current_price = data[key].values[-1]
-            
+            positions[i] = positions[i] if positions[i] >= 0 else 0 
             trade_data = execute_trade(app, traders_actions[i], action_allocation_percentages[i], current_price, float(current_value), float(cash), 
                           positions[i], 0.5, 1, key)
             

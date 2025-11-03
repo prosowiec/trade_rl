@@ -57,11 +57,8 @@ with st.sidebar:
     st.header("📂 Wybierz widok")
     view_option = st.radio(
         "Tryb widoku:",
-        ["📅 Historia transakcji","📊 Portfolio", "🤖 Traderzy indywidualni",]
+        ["📅 Historia transakcji","📊 Wyniki testowe - portfolio", "🤖 Wyniki testowe - Traderzy indywidualni",]
     )
-
-    st.markdown("---")
-    st.write("💡 Wskazówka: wybierz widok, aby zobaczyć portfel, agentów lub historię transakcji.")
 
 if view_option == "📊 Portfolio":
     st.subheader("🧺 Podsumowanie portfela")
@@ -84,7 +81,7 @@ elif view_option == "🤖 Traderzy indywidualni":
 
 
 elif view_option == "📅 Historia transakcji":
-    transactions_view()
+    transactions_view(active_tickers)
 
         
 #https://ui.shadcn.com/

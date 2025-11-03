@@ -62,7 +62,7 @@ def evaluate_porfolio_steps_for_UI(trading_desk : dict, window_size = 96):
         data = data[:min_size].reset_index(drop=True)    
         data = pd.concat([data[:min_size], temp[:min_size]], axis=1)
         
-    portfolio_manager = AgentPortfolio(input_dim=window_size, action_dim=len(tickers))
+    portfolio_manager = AgentPortfolio(tickers, input_dim=window_size, action_dim=len(tickers))
     data_split = int(len(data)  * 0.8)
     train_data = data[:data_split]
     valid_data = data[data_split:]

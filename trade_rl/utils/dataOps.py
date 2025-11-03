@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
-from utils.IB_connector import retrive_market_data
+from utils.IB_connector import retrive_market_data, IBapi
+import threading
 
 
 def get_training_set_from_IB(app, ticker : str) -> pd.DataFrame:
@@ -12,8 +13,8 @@ def get_training_set_from_IB(app, ticker : str) -> pd.DataFrame:
     return training_set
 
 
-def get_recent_data(app, tickers):
-    training_set_tickers = retrive_market_data(app, tickers, duration = "7 d", time_interval = "15 mins", sleep_time=2)
+def get_recent_data(app, tickers, duration = "7 d"):
+    training_set_tickers = retrive_market_data(app, tickers, duration = duration, time_interval = "15 mins", sleep_time=1)
     data = pd.DataFrame()
     for ticker in tickers:
         training_set = training_set_tickers[ticker]
@@ -26,6 +27,40 @@ def get_recent_data(app, tickers):
         data = pd.concat([data, temp], axis=1)
 
     
+    return data
+
+def get_recent_data_for_UI(tickers, duration = "7 d", host="ib-gateway", port=4004, client_id=1):
+    
+    app = IBapi()
+    app.connect(host, port, client_id)
+
+    thread = threading.Thread(target=app.run, daemon=True)
+    thread.start()
+
+    training_set_tickers = retrive_market_data(app, tickers, duration = duration, time_interval = "15 mins", sleep_time=1)
+    data = pd.DataFrame()  # pusty DataFrame do łączenia
+
+    for ticker in tickers:
+        training_set = training_set_tickers[ticker]
+        
+        training_set['Volume'] = training_set['Volume'].astype(float)
+        training_set['Date'] = pd.to_datetime(
+            training_set['Date'].str.replace(' US/Eastern', ''), 
+            format="%Y%m%d %H:%M:%S"
+        )
+
+        temp = training_set[['Date', 'Close']].copy().rename(columns={'Close': ticker})
+        temp = temp.set_index('Date')
+
+        if data.empty:
+            data = temp
+        else:
+            # Łączenie po indeksie (Date)
+            data = data.join(temp, how='outer')
+
+    data = data.sort_index()
+    app.disconnect()
+
     return data
 
 def get_observation(close_data, window_size, trader_action, position, cash, n_assets):

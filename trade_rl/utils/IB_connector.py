@@ -1,7 +1,6 @@
 import pandas as pd
 import threading
 import time
-import random
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
@@ -233,3 +232,4 @@ def get_portfolio_info(host="ib-gateway", port=4004, client_id=1):
 
     app.disconnect()
     return portfolio_df, account_series , positions
+
