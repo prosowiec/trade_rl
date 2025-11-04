@@ -77,6 +77,7 @@ def main(app: IBapi, tickers_group = 'PENNY', dashboard_enabled = False):
     logging.info("Loaded trading desk with agents for tickers: " + ", ".join(tickers))
     portfolio_manager = AgentPortfolio(tickers, input_dim=96, action_dim=len(tickers))
     portfolio_manager.load_agent()
+    portfolio_manager.mode_eval()
     logging.info("Loaded portfolio manager agent.")
     
     WINDOW_SIZE = 96

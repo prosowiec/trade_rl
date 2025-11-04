@@ -91,6 +91,7 @@ class AgentPortfolio:
         self.noise = OUNoise(size=action_dim, mu=0.0, theta=0.15, sigma=0.4)
         ticker_list = "_".join(ticker_list)
         self.filename = 'trade_rl/models/portfolio_manager_' + ticker_list
+        self.eval_flag = False
 
         
     def update_replay_memory(self, transition):
@@ -99,6 +100,9 @@ class AgentPortfolio:
     def train(self):
         if len(self.replay_memory) < self.MIN_REPLAY_MEMORY_SIZE:
             return
+        
+        if self.eval_flag:
+            self.mode_train()
 
         minibatch = random.sample(self.replay_memory, self.MINIBATCH_SIZE)
         states, actions, rewards, next_states, dones = zip(*minibatch)
@@ -178,3 +182,19 @@ class AgentPortfolio:
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
 
         logging.info(f"Agent załadowany z {self.filename}")
+    
+    def mode_eval(self):
+        self.actor.eval()
+        self.critic.eval()
+        self.target_critic.eval()
+        self.target_actor.eval()
+        self.eval_flag = True
+        logging.info(f"Models are set to eval")
+        
+    def mode_train(self):
+        self.actor.train()
+        self.critic.train()
+        self.target_critic.train()
+        self.target_actor.train()
+        self.eval_flag = False
+        logging.info(f"Models are set to train")

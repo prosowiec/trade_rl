@@ -135,7 +135,8 @@ def get_trading_desk(tickers):
     for ticker in tickers:
         trader = DQNAgent(ticker)
         trader.load_dqn_agent()
-        
+        trader.target_model.eval()
+        trader.model.eval()
         trading_desk[ticker] = trader
 
     return trading_desk

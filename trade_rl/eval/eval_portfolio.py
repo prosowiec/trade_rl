@@ -7,7 +7,7 @@ from agent_env.manager_env import PortfolioEnv
 from agents.managerModel import AgentPortfolio
 from dashboardViews.streamlit_graphs import render_portfolio_summary_streamlit
 
-def evaluate_steps_portfolio(env, trading_desk, portfolio_manager):
+def evaluate_steps_portfolio(env:PortfolioEnv, trading_desk, portfolio_manager:AgentPortfolio):
     """
     Evaluate the portfolio environment with separate trader and portfolio manager models
     
@@ -23,6 +23,7 @@ def evaluate_steps_portfolio(env, trading_desk, portfolio_manager):
     done = False
     steps = 0
     allocations = []
+    portfolio_manager.mode_eval()
     while not done:
         state_tensor = torch.tensor(state, dtype=torch.float32, device=device)
         
@@ -71,7 +72,7 @@ def evaluate_porfolio_steps_for_UI(trading_desk : dict, window_size = 96):
 
     valid_env = PortfolioEnv(valid_data,window_size=WINDOW_SIZE, max_allocation=.5)
     evaluate_steps_portfolio(valid_env, trading_desk, portfolio_manager)
-    render_portfolio_summary_streamlit(valid_env, title_suffix="(Validation Set)")
+    render_portfolio_summary_streamlit(valid_env, title_suffix="(Zbiór Walidacyjny)")
 
     
 def render_portfolio_summary(env, title_suffix=""):

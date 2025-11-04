@@ -123,7 +123,7 @@ def plot_trader_vs_prices(prices_df, trades_df, selected_asset=None, date_fmt="%
         ticktext = [dates_list[int(i)].strftime(date_fmt) for i in tickvals]
 
         fig.update_layout(
-            title=f"Działania tradera dla {asset}",
+            title=f"Działania algorytmu handlującego dla {asset}",
             xaxis=dict(
                 tickmode="array",
                 tickvals=tickvals.tolist(),
@@ -140,41 +140,77 @@ def plot_trader_vs_prices(prices_df, trades_df, selected_asset=None, date_fmt="%
         st.plotly_chart(fig, use_container_width=True)
                                                 
 def transactions_view(active_tickers):
-    st.subheader("📅 Historia transakcji (Timeline)")
-    if st.button("🔄 Odśwież dane"):
-        st.cache_data.clear()
-        st.toast("Dane zostały odświeżone!", icon="🔁")
-    
+
+    col11, col22 = st.columns(2)
+
     trades = load_trades_from_db()
     portfolio_df, account_series, positions = get_portfolio_info()
 
-    if not portfolio_df.empty:
-        net_liquidation = float(account_series['NetLiquidation'])
-        st.metric(
-            label="💼 Łączna wartość portfela",
-            value=f"${net_liquidation:,.2f}"
-        )        
-        st.subheader("🥧 Struktura portfela (według wartości rynkowej)")
-        try:
-            pie_df = (
-                portfolio_df.groupby("symbol")["marketValue"]
-                .sum()
-                .reset_index()
-                .sort_values("marketValue", ascending=False)
+    with col11:
+        st.subheader("📅 Historia transakcji")
+        
+        if st.button("🔄 Odśwież dane"):
+            st.cache_data.clear()
+            st.toast("Dane zostały odświeżone!", icon="🔁")
+        if not portfolio_df.empty:
+            net_liquidation = float(account_series['NetLiquidation'])
+            unRealizedPnL = float(account_series['UnrealizedPnL'])
+            realizedPnL = float(account_series['RealizedPnL'])
+            cash = float(account_series['AvailableFunds'])
+            
+            def color_value(value):
+                return f"🟢 ${value:,.2f}" if value >= 0 else f"🔴 ${value:,.2f}"
+
+            st.metric(
+                label="💼 Łączna wartość portfela",
+                value=f"${net_liquidation:,.2f}"
+            )
+            st.metric(
+                label="💼 Dostępna gotówka",
+                value=color_value(cash)
             )
 
-            fig = px.pie(
-                pie_df,
-                names="symbol",
-                values="marketValue",
-                title="Udział aktywów w portfelu",
-                hole=0.3,
+            st.metric(
+                label="📈 Niezrealizowany zysk/strata (z otwartych pozycji)",
+                value=color_value(unRealizedPnL)
             )
-            fig.update_traces(textinfo="percent+label", pull=[0.05]*len(pie_df))
-            st.plotly_chart(fig, use_container_width=True)
-            st.subheader("💰 Zyski i straty według tickera")
-        except Exception as e:
-            st.error(f"Błąd przy tworzeniu wykresu: {e}")
+
+            st.metric(
+                label="💰 Zrealizowany zysk/strata (z dzisiejszych transakcji)",
+                value=color_value(realizedPnL)
+            )
+            if cash < 0:
+                st.warning(
+                    "⚠️ Ujemna gotówka w IBKR oznacza, że korzystasz z **margin (środków pożyczonych od brokera)**. "
+                    "Twoje pozycje są częściowo finansowane kredytem. "
+                )
+
+
+
+    with col22:
+        if not portfolio_df.empty:
+            st.subheader("🥧 Struktura portfela (według wartości rynkowej)")
+            try:
+                pie_df = (
+                    portfolio_df.groupby("symbol")["marketValue"]
+                    .sum()
+                    .reset_index()
+                    .sort_values("marketValue", ascending=False)
+                )
+
+                fig = px.pie(
+                    pie_df,
+                    names="symbol",
+                    values="marketValue",
+                    title="Udział aktywów w portfelu",
+                    hole=0.3,
+                )
+                fig.update_traces(textinfo="percent+label", pull=[0.05]*len(pie_df))
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Błąd przy tworzeniu wykresu: {e}")
+                
+    st.subheader("💰 Zyski i straty według instrumentu finansowego")
     try:
         pnl_df = portfolio_df.copy()
         pnl_df["totalPNL"] = pnl_df["unrealizedPNL"] + pnl_df["realizedPNL"]
@@ -197,17 +233,19 @@ def transactions_view(active_tickers):
         col1, col2 = st.columns(2)
         
         with col1:
-            # PNL bar chart
+            pnl_df["totalPNL"] = pnl_df["totalPNL"].astype(float).fillna(0.0).round(0)
+            pnl_df["color"] = np.where(pnl_df["totalPNL"] < 0, "red", "green")
             fig_bar = px.bar(
                 pnl_df,
                 y="symbol",
                 x="totalPNL",
-                title="Łączny PNL (Unrealized + Realized)",
-                color="totalPNL",
-                color_continuous_scale=["red", "gray", "green"],
-                labels={"totalPNL": "Total PNL ($)", "symbol": "Ticker"},
-                orientation='h'
-            )            
+                title="Łączny Zysk/Strata (Niezrealizowany/a + Zrealizowany/a)",
+                color="color",
+                text="totalPNL",
+                color_discrete_map={"red": "red", "green": "green"},
+                labels={"totalPNL": "Total PNL ($)", "symbol": "Aktywo"},
+                orientation="h"
+            )
             fig_bar.update_layout(showlegend=False)
             st.plotly_chart(fig_bar, use_container_width=True)
         
@@ -217,13 +255,18 @@ def transactions_view(active_tickers):
                 position_df,
                 y="symbol",
                 x="position",
-                title="Pozycje według tickera",
+                title="Pozycje według instrumentu finansowego",
                 color="position",
                 color_continuous_scale="Blues",
-                labels={"position": "Liczba akcji", "symbol": "Ticker"},
+                labels={"position": "Liczba akcji", "symbol": "Aktywo"},
+                text = 'position',
                 orientation='h'
             )
             fig_pos.update_layout(showlegend=False)
+            fig_pos.update_traces(
+                text=position_df["position"].round(0)
+            )
+
             st.plotly_chart(fig_pos, use_container_width=True)
             
     except Exception as e:
@@ -278,7 +321,7 @@ def transactions_view(active_tickers):
                 color = "#95a5a6"  # szary
             return f"background-color: {color}; color: black; text-align:center"
 
-        st.header("Ostatnie działania traderów")
+        st.header("Ostatnie działania agentów handlujących")
         st.dataframe(
             matrix.style.applymap(color_action),
             use_container_width=True,

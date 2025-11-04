@@ -8,11 +8,25 @@ from dashboardViews.transactions import transactions_view
 import pandas as pd
 from tickers import Tickers
 
-SCRIPT_NAME = "trade_rl/main.py"
-st.set_page_config(page_title="AI Trading Dashboard", layout="wide", page_icon="💹")
+import random, numpy as np, torch
 
-st.title("💹 AI Trading Dashboard")
-st.markdown("### Monitorowanie wyników agentów i portfela")
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+set_seed(42)
+
+SCRIPT_NAME = "trade_rl/main.py"
+st.set_page_config(page_title="Handel SI", layout="wide", page_icon="💹")
+
+st.title("💹 Aplikacja do automatycznego podejmowania decyzji inwestycyjnych")
 
 groups_data = get_tickers_group()
 active_tickers  = get_active_tickers()
@@ -57,12 +71,10 @@ with st.sidebar:
     st.header("📂 Wybierz widok")
     view_option = st.radio(
         "Tryb widoku:",
-        ["📅 Historia transakcji","📊 Wyniki testowe - portfolio", "🤖 Wyniki testowe - Traderzy indywidualni",]
+        ["📅 Historia transakcji","📊 Wyniki testowe - agent portfolio", "🤖 Wyniki testowe - agenci handlujący"]
     )
 
-if view_option == "📊 Portfolio":
-    st.subheader("🧺 Podsumowanie portfela")
-
+if view_option == "📊 Wyniki testowe - agent portfolio":
     with st.spinner("Obliczanie wyników portfela..."):
         trading_desk = get_trading_desk(active_tickers)
         evaluate_porfolio_steps_for_UI(trading_desk, window_size=96)
@@ -70,7 +82,7 @@ if view_option == "📊 Portfolio":
     st.success("✅ Portfel został przetworzony.")
     st.markdown("---")
 
-elif view_option == "🤖 Traderzy indywidualni":
+elif view_option == "🤖 Wyniki testowe - agenci handlujący":
     st.subheader("📈 Wyniki indywidualnych agentów")
     for ticker in active_tickers:
         st.markdown(f"### 🤖 Agent dla {ticker}")
