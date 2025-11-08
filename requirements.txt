@@ -1,0 +1,15 @@
+numpy
+torch
+tqdm
+pandas
+streamlit
+sqlalchemy
+ibapi
+pyautogui
+pygetwindow
+gym
+matplotlib
+plotly
+apscheduler
+pytz
+psutil
