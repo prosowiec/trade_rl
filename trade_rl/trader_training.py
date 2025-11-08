@@ -13,7 +13,10 @@ from utils.dataOps import get_training_set_from_IB
 from utils.database import upload_stock_data, read_stock_data, upsert_training_logs
 from agent_env.enviroments import TimeSeriesEnv_simple
 from eval.eval_models import evaluate_steps, render_env
-from trade_rl.tickers import Tickers
+from tickers import Tickers
+from utils.IB_connector import IBapi
+import threading
+import time
 
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
 logging.basicConfig(
@@ -54,10 +57,21 @@ def train_episode(agent : DQNAgent,env: TimeSeriesEnv_simple, epsilon):
 
 
 def prepare_environments(ticker, newData = False, window_size=96):
+    
     if newData:
-        # TODO: pass IB api instance
-        training_set = get_training_set_from_IB(ticker)
+        app = IBapi()
+        logging.info("=" * 60)
+        logging.info("Connecting to IB broker...")
+        app.connect("127.0.0.1", 7497, clientId=1)
+
+        api_thread = threading.Thread(target=app.run, daemon=True)
+        api_thread.start()
+
+        time.sleep(2)
+
+        training_set = get_training_set_from_IB(app, ticker)
         upload_stock_data(training_set)
+        app.disconnect()
         
     train_data, valid_data, test_data = read_stock_data(ticker)
     env = TimeSeriesEnv_simple(train_data['close'].values, window_size=window_size)
@@ -154,7 +168,7 @@ def trining_retry_loop(ticker, newData=False, num_retries=15):
     return reward_all, evaluate_rewards, test_rewards
 
 if __name__=="__main__":
-    tickers = Tickers.TICKERS_penny
+    tickers = Tickers().VOLATILE_SMALL
     
     for ticker in tickers:
                 logging.info(f'================ Training {ticker} ================')

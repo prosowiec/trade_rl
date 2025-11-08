@@ -18,14 +18,16 @@ class Tickers:
         
         self.TRASH_TICKERS = ["CLFD","IRS","BRC","TBRG","CCNE","CVEO"]
 
+        self.VOLATILE_SMALL = ["NIO", "ABEV", "PBI", "GNW", "PLUG"]
         self.groups ={
             'PENNY': self.TICKERS_penny,
             'BIG': self.BIG_TICKERS,
-            'TRASH': self.TRASH_TICKERS
+            'TRASH': self.TRASH_TICKERS,
+            'VOLATILE_SMALL' : self.VOLATILE_SMALL
         }
             
     def get_current_tickers(self):
-        return self.TICKERS_penny
+        return self.VOLATILE_SMALL
     
     def get_tickers(self, group_name = 'TICKERS_penny'):
         
