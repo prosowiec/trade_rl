@@ -8,7 +8,7 @@ trade_rl/agents/__pycache__
 trade_rl/agents/__pycache__
 trade_rl/agent_env/__pycache__
 trade_rl/utils/__pycache__
-data/*
+trade_rl/data/*
 toIgnore/*
 __pycache__/*
 .env

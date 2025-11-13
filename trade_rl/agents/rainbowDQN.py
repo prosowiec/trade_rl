@@ -48,10 +48,67 @@ class NoisyLinear(nn.Module):
             bias = self.bias_mu
         return torch.nn.functional.linear(x, weight, bias)
 
+# class RainbowDQN(nn.Module):
+#     def __init__(self, input_dim, output_dim, seq_len=256):
+#         super(RainbowDQN, self).__init__()
+#         self.output_dim = output_dim
+#         self.seq_len = seq_len
+        
+#         # 1D Convolutional layers for temporal feature extraction
+#         # Input shape: (batch, seq_len, input_dim) -> transpose to (batch, input_dim, seq_len)
+#         self.conv1 = nn.Conv1d(in_channels=input_dim, out_channels=64, kernel_size=3, padding=1)
+#         self.conv2 = nn.Conv1d(in_channels=64, out_channels=32, kernel_size=3, padding=1)
+#         self.conv3 = nn.Conv1d(in_channels=32, out_channels=16, kernel_size=3, padding=1)
+        
+#         self.relu = nn.ReLU()
+#         self.dropout = nn.Dropout(0.2)
+        
+#         # Calculate flattened size after convolutions
+#         # seq_len remains the same due to padding=1
+#         self.flatten_size = 16 * seq_len
+        
+#         # Dueling streams
+#         self.adv1 = NoisyLinear(self.flatten_size, 64)
+#         self.adv2 = NoisyLinear(64, output_dim)
+        
+#         self.val1 = NoisyLinear(self.flatten_size, 64)
+#         self.val2 = NoisyLinear(64, 1)
+    
+#     def forward(self, x):
+#         # x shape: (batch, seq_len, input_dim)
+#         # Transpose for conv1d: (batch, input_dim, seq_len)
+#         x = x.transpose(1, 2)
+        
+#         # Convolutional layers
+#         x = self.relu(self.conv1(x))
+#         x = self.dropout(x)
+        
+#         x = self.relu(self.conv2(x))
+#         x = self.dropout(x)
+        
+#         x = self.relu(self.conv3(x))
+#         x = self.dropout(x)
+        
+#         # Flatten
+#         x = x.reshape(x.size(0), -1)
+        
+#         # Dueling streams
+#         adv = self.relu(self.adv1(x))
+#         adv = self.adv2(adv)
+        
+#         val = self.relu(self.val1(x))
+#         val = self.val2(val)
+        
+#         # Combine value and advantage
+#         q = val + adv - adv.mean(dim=1, keepdim=True)
+        
+#         return q
+    
+#     def reset_noise(self):
+#         for name, module in self.named_modules():
+#             if isinstance(module, NoisyLinear):
+#                 module.reset_noise()
 
-# ===========================
-# Dueling LSTM Network
-# ===========================
 class RainbowDQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(RainbowDQN, self).__init__()
