@@ -31,7 +31,7 @@ def evaluate_steps(env, model, OHCL = False):
         state, reward, done = env.step(action)
         total_reward += reward
         steps += 1
-
+    total_reward = env.total_profit
     return total_reward
 
 

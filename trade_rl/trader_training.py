@@ -168,7 +168,7 @@ def trining_retry_loop(ticker, newData=False, num_retries=15):
     return reward_all, evaluate_rewards, test_rewards
 
 if __name__=="__main__":
-    tickers = Tickers().VOLATILE_SMALL
+    tickers = Tickers().similar_volatile_small
     
     for ticker in tickers:
                 logging.info(f'================ Training {ticker} ================')

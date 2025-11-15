@@ -31,5 +31,12 @@ class OUNoise:
     def __call__(self, action):
         """Call to sample noise."""
         res = action.flatten() + self.sample()
-        #res = res / res.sum()
+        #res = (res - res.min()) / (res.max() - res.min())
+        res = np.clip(res, 0, None)
+        s = res.sum()
+        if s == 0:
+            res = np.ones_like(res) / len(res)
+        else:
+            res = res / s                     
+
         return np.clip(res,0,1)

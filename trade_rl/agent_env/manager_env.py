@@ -118,15 +118,27 @@ class PortfolioEnv(gym.Env):
                 allocation_left = max(0, self.max_allocation - current_allocation)
                 allocation_left = min(allocation_left, alloc)
                 
-                invest_amount = self.cash * allocation_left
-                invest_amount = min(invest_amount + self.transaction_cost, self.cash)
-                shares = np.floor(invest_amount / price)
+                # invest_amount = self.cash * allocation_left
+                # invest_amount = min(invest_amount + self.transaction_cost, self.cash)
+                # shares = np.floor(invest_amount / price)
                 
-                max_shares_to_buy = max(np.floor((self.cash - self.transaction_cost) / price),0)
-                shares = min(shares, max_shares_to_buy)
-                cost = shares * price + self.transaction_cost
-
+                # max_shares_to_buy = max(np.floor((self.cash - self.transaction_cost) / price),0)
+                # shares = min(shares, max_shares_to_buy)
+                # cost = shares * price + self.transaction_cost
+                max_invest = self.cash - self.transaction_cost
+                if max_invest <= 0:
+                    shares = 0
+                else:
+                    invest_amount = max_invest * allocation_left
+                    shares = np.floor(invest_amount / price)
+                    
+                    # Double-check we don't exceed available cash
+                    max_shares_to_buy = np.floor(max_invest / price)
+                    shares = min(shares, max_shares_to_buy)
+                    shares = max(shares, 0)
+                    
                 if shares > 0:
+                    cost = shares * price + self.transaction_cost
                     invest_amount = shares * price
                     self.position[i] += shares
                     self.cash -= cost

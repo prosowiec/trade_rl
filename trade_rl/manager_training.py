@@ -8,6 +8,7 @@ from utils.database import read_stock_data
 from eval.eval_portfolio import evaluate_steps_portfolio, render_portfolio_summary
 from agent_env.manager_env import PortfolioEnv
 from tickers import Tickers
+from utils.state_managment import set_seed
 import logging
 
 logging.basicConfig(
@@ -60,7 +61,9 @@ def train_porfolio_manager(env, trading_desk, episode):
 
 
 if __name__ == "__main__":
-    tickers = Tickers().BIG_TICKERS
+    set_seed(42, derterministic=False)
+
+    tickers = Tickers().aggresive
     trading_desk = {}
     data = pd.DataFrame()
     min_size = 9999999
