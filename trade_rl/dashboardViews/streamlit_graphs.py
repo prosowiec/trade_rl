@@ -13,6 +13,12 @@ def render_portfolio_summary_streamlit(env, title_suffix=""):
     """
     st.header(f"📊 Podsumowanie portfela {title_suffix}")
 
+    sell = sum([len(asset) for asset in env.states_sell])
+    st.write("Liczba wszystkich kroków sell:", sell)
+
+    buy = sum([len(asset) for asset in env.states_buy])
+    st.write("Liczba wszystkich kroków buy:", buy)
+    
     # =====================
     # Row 1: Portfolio Value & Normalized Prices
     # =====================
@@ -360,7 +366,7 @@ def render_env_streamlit(env, title_suffix="", OHCL=False):
     
     # Add vertical line at step 48
     fig.add_vline(
-        x=48,
+        x=96,
         line_dash="dash",
         line_color="red",
         annotation_text="Początek okna czasowego",

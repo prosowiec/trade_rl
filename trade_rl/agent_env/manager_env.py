@@ -149,8 +149,8 @@ class PortfolioEnv(gym.Env):
                         f"with invest amount {invest_amount:.2f} and cost {cost:.2f}, cash now {self.cash:.2f}, allocation {allocation_left:.3f}"
                     )
               
-                self.states_buy[i].append(self.current_step)
-                self.shares_buy[i].append(shares)
+                    self.states_buy[i].append(self.current_step)
+                    self.shares_buy[i].append(shares)
                 self.asset_percentage_buy_history[i].append(shares * price / (prev_value + 1e-8))
                     
             elif act == 2:  # SELL
@@ -168,8 +168,8 @@ class PortfolioEnv(gym.Env):
                         f"Selling {shares_to_sell} of asset {self.asset_names[i]} at price {price:.2f} "
                         f"with revenue {revenue:.2f}, cash now {self.cash:.2f}, allocation {alloc:.2f}"
                     )                
-                self.states_sell[i].append(self.current_step)
-                self.shares_sell[i].append(shares_to_sell)
+                    self.states_sell[i].append(self.current_step)
+                    self.shares_sell[i].append(shares_to_sell)
                 self.asset_percentage_sell_history[i].append(shares_to_sell * price / (prev_value + 1e-8))
                 
             else:

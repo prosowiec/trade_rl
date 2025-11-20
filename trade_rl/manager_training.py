@@ -61,7 +61,7 @@ def train_porfolio_manager(env, trading_desk, episode):
 
 
 if __name__ == "__main__":
-    set_seed(42, derterministic=False)
+    #set_seed(42, derterministic=False)
 
     tickers = Tickers().aggresive
     trading_desk = {}

@@ -20,7 +20,7 @@ class Tickers:
 
         self.VOLATILE_SMALL = ["NIO", "ABEV", "PBI", "GNW", "PLUG"]
         self.similar_volatile_small = ["CRMD", "SRTS", "RZLV" , "ABCL"] #["RDZN", "ARDX", "ATUS", "AAOI"]#["SDOT", "RDZN", "ARDX", "HUT", "KOS", "NOK", "SIRI"] # SDOT , RDZN, ARDX, ATUS, AAOI
-        self.aggresive = ["RDZN","ATUS","ARDX","AAOI","CRMD","RZLV","IMUX","LXEO","ANIX"]
+        self.aggresive = ["RDZN","ATUS","ARDX","AAOI","CRMD","LXEO","ANIX"] #RZLV, IMUX
         self.groups ={
             'PENNY': self.TICKERS_penny,
             'BIG': self.BIG_TICKERS,
