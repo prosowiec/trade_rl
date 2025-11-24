@@ -8,6 +8,8 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
+from dashboardViews.graphConfig import LEGEND,FIGURE_SHOW_COFIG
+
 def plot_trader_vs_prices(prices_df, trades_df, selected_asset=None, date_fmt="%m-%d %H:%M"):
 
     if prices_df.empty or trades_df.empty:
@@ -129,21 +131,22 @@ def plot_trader_vs_prices(prices_df, trades_df, selected_asset=None, date_fmt="%
                 tickvals=tickvals.tolist(),
                 ticktext=ticktext,
                 title="Czas (z pominięciem dni zamkniętej giełdy)",
-                showgrid=False
+                showgrid=False,
+                title_font=dict(color='black'), tickfont=dict(color='black')
             ),
-            yaxis=dict(title="Cena", showgrid=True),
+            yaxis=dict(title="Cena", showgrid=True, title_font=dict(color='black'), tickfont=dict(color='black')),
             hovermode="x unified",
             template="plotly_white",
             margin=dict(l=40, r=20, t=60, b=40)
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG, key = np.random.randint(0,10000) )
                                                 
 def transactions_view(active_tickers):
 
     col11, col22 = st.columns(2)
 
-    trades = load_trades_from_db()
+    trades = load_trades_from_db(active_tickers)
     portfolio_df, account_series, positions = get_portfolio_info()
 
     with col11:
@@ -206,7 +209,7 @@ def transactions_view(active_tickers):
                     hole=0.3,
                 )
                 fig.update_traces(textinfo="percent+label", pull=[0.05]*len(pie_df))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG, key=np.random.randint(0,10000))
             except Exception as e:
                 st.error(f"Błąd przy tworzeniu wykresu: {e}")
                 
@@ -246,8 +249,17 @@ def transactions_view(active_tickers):
                 labels={"totalPNL": "Total PNL ($)", "symbol": "Aktywo"},
                 orientation="h"
             )
-            fig_bar.update_layout(showlegend=False)
-            st.plotly_chart(fig_bar, use_container_width=True)
+            fig_bar.update_layout(showlegend=False,                
+                xaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                ),
+                yaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                )
+            )
+            st.plotly_chart(fig_bar, use_container_width=True, config=FIGURE_SHOW_COFIG, key = np.random.randint(0,10000))
         
         with col2:
             # Position bar chart
@@ -262,12 +274,21 @@ def transactions_view(active_tickers):
                 text = 'position',
                 orientation='h'
             )
-            fig_pos.update_layout(showlegend=False)
+            fig_pos.update_layout(showlegend=False,
+                xaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                ),
+                yaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                )
+            )
             fig_pos.update_traces(
                 text=position_df["position"].round(0)
             )
 
-            st.plotly_chart(fig_pos, use_container_width=True)
+            st.plotly_chart(fig_pos, use_container_width=True, config=FIGURE_SHOW_COFIG, key=np.random.randint(0,10000))
             
     except Exception as e:
         st.error(f"Błąd przy tworzeniu wykresów: {e}")        

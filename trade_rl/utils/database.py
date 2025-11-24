@@ -112,15 +112,15 @@ def save_trade_to_db(action_data):
     finally:
         session.close()
         
-def load_trades_from_db(asset_name=None):
+def load_trades_from_db(asset_names=None):
     """
     Zwraca listę transakcji (opcjonalnie filtrowaną po nazwie aktywa).
     """
     session = SessionLocal()
     try:
         query = session.query(Trade)
-        if asset_name:
-            query = query.filter(Trade.asset_name == asset_name)
+        if asset_names:
+            query = query.filter(Trade.asset_name.in_(asset_names))
         trades = query.order_by(Trade.timestamp.desc()).all()
         return trades
     finally:

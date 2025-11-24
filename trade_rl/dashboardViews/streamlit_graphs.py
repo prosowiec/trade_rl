@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
+from dashboardViews.graphConfig import LEGEND,FIGURE_SHOW_COFIG
 
 def render_portfolio_summary_streamlit(env, title_suffix=""):
     """
@@ -49,10 +50,21 @@ def render_portfolio_summary_streamlit(env, title_suffix=""):
                 title=f'Profit: {profit_pct:.2f}% | Wartość końcowa: {env.portfolio_value_history[-1]:.2f}',
                 yaxis_title='Wartość portfela',
                 hovermode='x unified',
-                height=400,
-                showlegend=True
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                showlegend=True,
+                template='plotly_white',
+                legend=LEGEND,
+                xaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                ),
+                yaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                )
+            ) 
+            
+            
+            st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG)
         else:
             st.info("Brak danych o wartości portfela 📉")
 
@@ -78,9 +90,17 @@ def render_portfolio_summary_streamlit(env, title_suffix=""):
                 hovermode='x unified',
                 height=400,
                 showlegend=True,
-                legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02)
+                legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02),
+                xaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                ),
+                yaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                )
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG)
         else:
             st.info("Brak danych o cenach aktywów 📈")
 
@@ -118,9 +138,18 @@ def render_portfolio_summary_streamlit(env, title_suffix=""):
             fig.update_layout(
                 title=f'Całkowita wartość: {total_portfolio_value:.2f}',
                 height=400,
-                showlegend=True
+                showlegend=True,
+                legend=LEGEND,
+                xaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                ),
+                yaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                )
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG)
         else:
             st.info("Brak otwartych pozycji 💼")
 
@@ -152,9 +181,17 @@ def render_portfolio_summary_streamlit(env, title_suffix=""):
             fig.update_layout(
                 title='Zielony=Kup, Czerwony=Sprzedaj',
                 xaxis_title='Krok czasowy',
-                height=400
+                legend=LEGEND,
+                xaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                ),
+                yaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                )
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG)
         else:
             st.info("Brak aktywności handlowej 🔇")
 
@@ -219,7 +256,7 @@ def render_portfolio_summary_streamlit(env, title_suffix=""):
                 height=400,
                 showlegend=True
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG)
         else:
             st.info("Brak historii wartości aktywów 📊")
 
@@ -290,10 +327,18 @@ def render_portfolio_summary_streamlit(env, title_suffix=""):
                 yaxis_title='Procent portfela (%)',
                 yaxis_range=[0, 100],
                 hovermode='x unified',
-                height=400,
-                showlegend=True
+                showlegend=True,
+                legend=LEGEND,
+                xaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                ),
+                yaxis=dict(
+                    title_font=dict(color='black'),
+                    tickfont=dict(color='black')
+                )
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG)
         else:
             st.info("Brak historii procentowej alokacji 📈")
 
@@ -393,14 +438,22 @@ def render_env_streamlit(env, title_suffix="", OHCL=False):
             xanchor="right",
             x=1
         ),
-        template='plotly_white'
+        template='plotly_white',
+        xaxis=dict(
+            title_font=dict(color='black'),
+            tickfont=dict(color='black')
+        ),
+        yaxis=dict(
+            title_font=dict(color='black'),
+            tickfont=dict(color='black')
+        )
     )
     
     # Add grid
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config=FIGURE_SHOW_COFIG)
     
     # Add statistics below the chart
     col1, col2, col3, col4 = st.columns(4)
