@@ -4,6 +4,7 @@ logs/*
 trade_rl/models/*
 trade_rl/__pycache__
 trade_rl/eval/__pycache__
+trade_rl/data/*
 trade_rl/agents/__pycache__
 trade_rl/agents/__pycache__
 trade_rl/agent_env/__pycache__

@@ -10,5 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY . .
 
 EXPOSE 8501
-
-CMD ["bash", "-c", "python trade_rl/main.py --dashboard & streamlit run trade_rl/dashboard.py"]
+CMD ["bash", "-c", "streamlit run trade_rl/dashboard.py"]
+#CMD bash -c "python trade_rl/main.py --dashboard; streamlit run trade_rl/dashboard.py"
+#CMD ["python", "trade_rl/main.py --dashboard"]
+#CMD ["bash", "-c", "python trade_rl/main.py --dashboard & pid=$!; streamlit run trade_rl/dashboard.py; wait $pid"]

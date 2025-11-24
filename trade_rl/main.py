@@ -128,7 +128,13 @@ if __name__ == "__main__":
     api_thread.start()
 
     time.sleep(2)
-
+    logging.info("=" * 60)
+    logging.info("ARGUMENT PARSING DEBUG INFO:")
+    logging.info(f"sys.argv: {sys.argv}")
+    logging.info(f"args namespace: {args}")
+    logging.info(f"args.dashboard: {args.dashboard}")
+    logging.info(f"type(args.dashboard): {type(args.dashboard)}")
+    logging.info("=" * 60)
     try:
         main(app, dashboard_enabled=args.dashboard)
     except Exception as e:
