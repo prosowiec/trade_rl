@@ -38,6 +38,7 @@ def evaluate_steps_portfolio(env:PortfolioEnv, trading_desk, portfolio_manager:A
             'trader' : traders_actions,
             'portfolio_manager': np.array([action_allocation_percentages]).flatten()
         }
+        print(action_allocation_percentages)
         allocations.append(np.array([action_allocation_percentages]).flatten())
         # Take step
         state, reward, done, info = env.step(action)
@@ -64,6 +65,8 @@ def evaluate_porfolio_steps_for_UI(trading_desk : dict, window_size = 96):
         data = pd.concat([data[:min_size], temp[:min_size]], axis=1)
         
     portfolio_manager = AgentPortfolio(tickers, input_dim=window_size, action_dim=len(tickers))
+    portfolio_manager.load_agent()
+    portfolio_manager.mode_eval()
     data_split = int(len(data)  * 0.8)
     train_data = data[:data_split]
     valid_data = data[data_split:]

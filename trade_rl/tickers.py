@@ -3,7 +3,7 @@ class Tickers:
     def __init__(self):
         self.TICKERS_penny = [
             "WVE",   # Wave Life Sciences Ltd :contentReference[oaicite:0]{index=0}
-            "ATUS",  # Altice USA Inc :contentReference[oaicite:1]{index=1}
+            "OPTU",  # Altice USA Inc :contentReference[oaicite:1]{index=1}
             "CIFR",  # Cipher Mining Inc :contentReference[oaicite:2]{index=2}
             "LAZR",  # Luminar Technologies Inc :contentReference[oaicite:3]{index=3}
             "AAOI",  # Applied Optoelectronics Inc :contentReference[oaicite:4]{index=4}
@@ -20,7 +20,7 @@ class Tickers:
 
         self.VOLATILE_SMALL = ["NIO", "ABEV", "PBI", "GNW", "PLUG"]
         self.similar_volatile_small = ["CRMD", "SRTS", "RZLV" , "ABCL"] #["RDZN", "ARDX", "ATUS", "AAOI"]#["SDOT", "RDZN", "ARDX", "HUT", "KOS", "NOK", "SIRI"] # SDOT , RDZN, ARDX, ATUS, AAOI
-        self.aggresive = ["RDZN","ATUS","ARDX","AAOI","CRMD","LXEO","ANIX"] #RZLV, IMUX
+        self.aggresive = ["RDZN","OPTU","ARDX","AAOI","CRMD","LXEO","ANIX"] #RZLV, IMUX
         self.groups ={
             'PENNY': self.TICKERS_penny,
             'BIG': self.BIG_TICKERS,

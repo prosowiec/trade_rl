@@ -63,7 +63,7 @@ def train_porfolio_manager(env, trading_desk, episode):
 if __name__ == "__main__":
     #set_seed(42, derterministic=False)
 
-    tickers = Tickers().aggresive
+    tickers = Tickers().TRASH_TICKERS
     trading_desk = {}
     data = pd.DataFrame()
     min_size = 9999999

@@ -13,8 +13,8 @@ def get_training_set_from_IB(app, ticker : str) -> pd.DataFrame:
     return training_set
 
 
-def get_recent_data(app, tickers, duration = "7 d"):
-    training_set_tickers = retrive_market_data(app, tickers, duration = duration, time_interval = "15 mins", sleep_time=1)
+def get_recent_data(app, tickers, duration = "7 d", sleep_time=3):
+    training_set_tickers = retrive_market_data(app, tickers, duration = duration, time_interval = "15 mins", sleep_time=sleep_time)
     data = pd.DataFrame()
     for ticker in tickers:
         training_set = training_set_tickers[ticker]

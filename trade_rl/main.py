@@ -37,7 +37,7 @@ def trading_job(app, trading_desk, portfolio_manager, WINDOW_SIZE):
             curr_trader = trading_desk[ticker]
             trader_input = data[ticker].values
             traders_actions.append(curr_trader.get_action(trader_input[-WINDOW_SIZE:], target_model=True))
-            
+
             if portfolio.empty:
                 value = 0
             else:
@@ -48,13 +48,13 @@ def trading_job(app, trading_desk, portfolio_manager, WINDOW_SIZE):
 
         current_state = get_observation(data[-WINDOW_SIZE:], WINDOW_SIZE, traders_actions, positions, float(cash), len(tickers))
         action_allocation_percentages = np.array([portfolio_manager.get_action_target(current_state)]).flatten()
-
+        logging.info(f"Portfolio allocation percentages: {action_allocation_percentages}")
         for i, key in enumerate(tickers):
             logging.info(f"Trader for {key} action: {traders_actions[i]} | Allocation: {action_allocation_percentages[i]:.3f}")
             current_price = data[key].values[-1]
             positions[i] = positions[i] if positions[i] >= 0 else 0 
             trade_data = execute_trade(app, traders_actions[i], action_allocation_percentages[i], current_price, float(current_value), float(cash), 
-                          positions[i], 0.5, 1, key)
+                         positions[i], 0.5, 1, key)
             
             save_trade_to_db(trade_data)
             
@@ -94,6 +94,7 @@ def main(app: IBapi, tickers_group = 'PENNY', dashboard_enabled = False):
         trading_job,
         'cron',
         hour='9-15',
+        #minute='*',
         minute='0,15,30,45',
         start_date='2024-01-01 09:30:00',
         args=(app, trading_desk, portfolio_manager, WINDOW_SIZE),
